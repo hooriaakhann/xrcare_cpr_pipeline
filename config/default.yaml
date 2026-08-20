@@ -75,3 +75,22 @@ filtering:
   butterworth_low_hz: 1.0
   butterworth_high_hz: 3.0
   butterworth_order: 4
+
+estimators:
+  cwt_freq_range_hz: [1.0, 3.0]
+  cwt_wavelet: morl
+  cwt_num_scales: 80
+  fft_freq_range_hz: [1.0, 3.0]
+  autocorr_lag_range_sec: [0.3, 1.0]
+  peak_min_distance_sec: 0.35
+  peak_prominence: 0.3
+
+repnet:
+  threshold: 0.2
+  within_period_threshold: 0.5
+  strides: [1, 2, 3, 4]
+  batch_size: 4
+  constant_speed: false
+  median_filter: true
+  fully_periodic: false
+  subprocess_timeout_sec: 1800.0

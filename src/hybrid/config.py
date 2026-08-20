@@ -316,6 +316,96 @@ class FilteringConfig(StrictModel):
         return self
 
 
+class EstimatorsConfig(StrictModel):
+    """Four classical rate estimators (Phase 9): CWT, autocorrelation, FFT,
+    peak detection. Frequency/lag search ranges default to the same band as
+    `filtering` but are independently tunable (Phase 15) since each
+    technique may benefit from a different effective band.
+    """
+
+    cwt_freq_range_hz: tuple[float, float] = (1.0, 3.0)
+    cwt_wavelet: str = "morl"
+    cwt_num_scales: int = 80
+    fft_freq_range_hz: tuple[float, float] = (1.0, 3.0)
+    autocorr_lag_range_sec: tuple[float, float] = (0.3, 1.0)
+    peak_min_distance_sec: float = 0.35
+    peak_prominence: float = 0.3
+
+    @field_validator("cwt_freq_range_hz", "fft_freq_range_hz", "autocorr_lag_range_sec")
+    @classmethod
+    def _range_positive_and_ordered(cls, v: tuple[float, float]) -> tuple[float, float]:
+        low, high = v
+        if not (0.0 < low < high):
+            raise ValueError(f"range must satisfy 0 < low < high, got {v}")
+        return v
+
+    @field_validator("cwt_num_scales")
+    @classmethod
+    def _min_scales(cls, v: int) -> int:
+        if v < 2:
+            raise ValueError(f"cwt_num_scales must be >= 2, got {v}")
+        return v
+
+    @field_validator("peak_min_distance_sec")
+    @classmethod
+    def _positive(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"peak_min_distance_sec must be > 0.0, got {v}")
+        return v
+
+    @field_validator("peak_prominence")
+    @classmethod
+    def _non_negative(cls, v: float) -> float:
+        if v < 0.0:
+            raise ValueError(f"peak_prominence must be >= 0.0, got {v}")
+        return v
+
+
+class RepNetConfig(StrictModel):
+    """RepNet learned-periodicity branch (Phase 10). Runs in an isolated
+    TensorFlow venv (`.venv-tf`, see ADR 0003) invoked via subprocess -- this
+    config only carries inference parameters; the venv/script locations are
+    fixed source-tree paths, not runtime-configurable (see repnet_branch.py).
+    """
+
+    threshold: float = 0.2
+    within_period_threshold: float = 0.5
+    strides: tuple[int, ...] = (1, 2, 3, 4)
+    batch_size: int = 4
+    constant_speed: bool = False
+    median_filter: bool = True
+    fully_periodic: bool = False
+    subprocess_timeout_sec: float = 1800.0
+
+    @field_validator("threshold", "within_period_threshold")
+    @classmethod
+    def _in_unit_interval(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"must be in [0.0, 1.0], got {v}")
+        return v
+
+    @field_validator("strides")
+    @classmethod
+    def _strides_positive(cls, v: tuple[int, ...]) -> tuple[int, ...]:
+        if not v or any(s < 1 for s in v):
+            raise ValueError(f"strides must be a non-empty tuple of ints >= 1, got {v}")
+        return v
+
+    @field_validator("batch_size")
+    @classmethod
+    def _positive_batch(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"batch_size must be >= 1, got {v}")
+        return v
+
+    @field_validator("subprocess_timeout_sec")
+    @classmethod
+    def _positive_timeout(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"subprocess_timeout_sec must be > 0.0, got {v}")
+        return v
+
+
 class HybridConfig(StrictModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -327,6 +417,8 @@ class HybridConfig(StrictModel):
     ego_motion: EgoMotionConfig = Field(default_factory=EgoMotionConfig)
     optical_flow: OpticalFlowConfig = Field(default_factory=OpticalFlowConfig)
     filtering: FilteringConfig = Field(default_factory=FilteringConfig)
+    estimators: EstimatorsConfig = Field(default_factory=EstimatorsConfig)
+    repnet: RepNetConfig = Field(default_factory=RepNetConfig)
 
     def config_hash(self) -> str:
         """Short hash of the fully-resolved config, for cache keys and the experiment ledger."""

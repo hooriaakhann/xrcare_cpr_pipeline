@@ -41,6 +41,25 @@ HAND_LANDMARKER = PinnedModel(
     sha256="fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",
 )
 
+# RepNet checkpoint (google-research/google-research repnet_colab.ipynb) --
+# three files that must live together in one directory for
+# tf.train.CheckpointManager to find them.
+REPNET_CHECKPOINT_POINTER = PinnedModel(
+    filename="checkpoint",
+    url="https://storage.googleapis.com/semantic_repetitions/repnet_ckpt/checkpoint",
+    sha256="bb7639ce0ba1adbbc8a3f400e43f9c09a1a89989d8e65ae236648641f8f3d680",
+)
+REPNET_CHECKPOINT_INDEX = PinnedModel(
+    filename="ckpt-70.index",
+    url="https://storage.googleapis.com/semantic_repetitions/repnet_ckpt/ckpt-70.index",
+    sha256="8b42d3dc13646b1ffe8f6bfa08c93e921566899329123109a30547147ba23967",
+)
+REPNET_CHECKPOINT_DATA = PinnedModel(
+    filename="ckpt-70.data-00000-of-00001",
+    url="https://storage.googleapis.com/semantic_repetitions/repnet_ckpt/ckpt-70.data-00000-of-00001",
+    sha256="6caf32eb28e089987ebc3d9ddf5e1e41c45d1c051eed6fd9635f97845956183d",
+)
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -77,3 +96,14 @@ def ensure_model(model: PinnedModel, models_dir: Path) -> Path:
             f"Delete the file and re-run to re-download, or the pinned checksum in models.py is stale."
         )
     return path
+
+
+def ensure_repnet_checkpoint(models_dir: Path) -> Path:
+    """Downloads (if missing) and verifies all three RepNet checkpoint files,
+    returning the directory containing them -- what
+    `tf.train.CheckpointManager(directory=...)` expects.
+    """
+    checkpoint_dir = Path(models_dir) / "repnet_ckpt"
+    for model in (REPNET_CHECKPOINT_POINTER, REPNET_CHECKPOINT_INDEX, REPNET_CHECKPOINT_DATA):
+        ensure_model(model, checkpoint_dir)
+    return checkpoint_dir

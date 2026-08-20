@@ -55,3 +55,8 @@ class RepNetUnavailableError(HybridError):
 class FilteringError(HybridError):
     """The Butterworth band-pass filter could not be applied (invalid band
     for the video's sample rate, too few samples, all-NaN signal, ...)."""
+
+
+class EstimatorError(HybridError):
+    """A classical rate estimator (CWT, autocorrelation, FFT, peaks) could
+    not produce a result (no in-band energy, fewer than 2 peaks, ...)."""
