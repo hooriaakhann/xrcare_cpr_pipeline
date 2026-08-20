@@ -1,10 +1,19 @@
-.PHONY: install lint format test test-all precommit clean
+.PHONY: install install-repnet lint format test test-all precommit clean
 
 VENV_PY := .venv/Scripts/python
+VENV_TF_PY := .venv-tf/Scripts/python
 
 install:
 	$(VENV_PY) -m pip install -e ".[dev]"
+	$(VENV_PY) -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 	$(VENV_PY) -m pre_commit install
+
+# RepNet (Phase 10) runs in its own isolated TensorFlow environment, invoked
+# via subprocess from the main venv -- see PROGRESS.md Phase 10 / ADR 0003.
+install-repnet:
+	python -m venv .venv-tf
+	$(VENV_TF_PY) -m pip install --upgrade pip
+	$(VENV_TF_PY) -m pip install tensorflow opencv-python-headless scipy
 
 lint:
 	$(VENV_PY) -m ruff check .
