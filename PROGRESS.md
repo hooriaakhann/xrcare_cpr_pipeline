@@ -367,3 +367,19 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 **Decisions:** (1) Reusing Phase 12's `fuse_estimates()` for ablations A-F (via a null RepNet candidate) instead of a bespoke aggregation rule — keeps every ablation's number produced by the same methodology as the real pipeline. (2) Investigated the C-ablation anomaly to a specific, evidenced root cause rather than reporting "C performs worse" as an unexplained aggregate number — the difference between "ego-motion correction sometimes hurts" (true) and "ego-motion correction catastrophically fails on one specific video via a previously-theoretical drift mechanism, now confirmed" (much more actionable) is exactly the kind of thing an ablation study exists to surface.
 
 **Next phase:** Phase 15 — Parameter Tuning.
+
+---
+
+## Phase 15 — Parameter Tuning (one defensible-default pass; stopped per user exception)
+
+**The "one defensible-default pass" this phase asks for is already complete — it's Phase 13's result.** Every tunable parameter across Phases 2-12 (`config/default.yaml`) was chosen with an explicit, documented justification at the phase that introduced it (e.g. the 1.0-3.0Hz band bracketing but not fitted to the dev GT range, ADR 0002; `disagreement_scale_cpm=10.0` as a first-pass value, ADR 0004) rather than fitted against dev accuracy — that fitting is exactly what this phase would do next, and is exactly what the user's exception list says to stop and ask about before doing at any scale. Nothing in the config changed between Phase 13's run and this entry.
+
+**Result of that pass, logged to the experiment ledger by Phase 13's `run_development_evaluation()` (phase="development_evaluation"):** dev MAE = **1.976 CPM** (95% CI [1.159, 2.664]), RMSE = **2.199**, mean signed error = **-0.112** (essentially unbiased). Full per-video table in the Phase 13 entry above.
+
+**Two concrete, well-motivated tuning candidates surfaced by Phase 14's ablation study** (not applied — flagged for a decision):
+1. **Ego-motion validity/drift bounds** (`ego_motion.min_inlier_ratio`, `max_rotation_deg`, `min_scale`/`max_scale`) — Phase 14 traced `video2_development.mp4`'s catastrophic CoTracker+affine ablation error (46.64 CPM off) to individually-small, per-frame-valid ego-motion noise compounding via unbounded cumulative composition into a 580px/1.19x drift by mid-video. Tightening the per-frame validity bounds, or adding a periodic re-anchoring mechanism to Phase 5's composition, are both plausible fixes worth evaluating.
+2. **`fusion.disagreement_scale_cpm`** (currently 10.0) — Phase 14 showed the full hybrid (1.98 MAE) already beats the tracker+flow-without-RepNet ablation (2.05), i.e. the current disagreement discount is already net-helpful; a systematic sweep could check whether a different scale improves on that further, or whether 10.0 is already close to a local optimum.
+
+**Stopping here, as instructed**, rather than running a systematic sweep over either candidate (or the full parameter space) and iterating against dev accuracy — per the explicit exception: *"Phase 15 parameter tuning: run one defensible-default pass, report dev MAE/RMSE, then stop and ask before doing a larger sweep."* Continuing to Phases 16 onward (diagnostics saving, test-safety guard, CI/testing wrap-up, documentation) in the meantime, since those don't depend on whether a tuning sweep happens — but no further parameter changes will be made without a decision on this.
+
+**Next phase:** Phase 16 — Save Diagnostics.
