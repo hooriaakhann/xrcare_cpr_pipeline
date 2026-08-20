@@ -1,0 +1,107 @@
+# Frozen config snapshot for held-out test-set evaluation.
+#
+# This is a byte-for-byte copy of config/default.yaml as of commit 98efa85
+# (tag: frozen-for-test-v1) -- the config Phase 15's tuning sweep settled
+# on (fusion.disagreement_scale_cpm=5.0; ego-motion bounds left at their
+# original, un-tuned Phase 0.5 defaults, since Phase 15's sweep over those
+# was inconclusive and not adopted). See PROGRESS.md's Phase 15 entry.
+#
+# hybrid.run_test loads THIS file explicitly, not config/default.yaml, so
+# it is immune to any later edit to default.yaml. Per CLAUDE.md: from the
+# point this file was created, estimator logic, the fusion formula,
+# confidence weighting, and every value below must not change in response
+# to anything observed from test videos. A genuine bug fix re-freezes
+# under a new tag and re-runs -- it does not edit this file in place.
+
+project:
+  seed: 42
+
+paths:
+  data_root: data
+  raw_dir: data/raw
+  processed_dir: data/processed
+  split_dir: data/split
+  metadata_dir: data/metadata
+  ground_truth_csv: data/metadata/ground_truth_summary.csv
+  cache_dir: data/cache
+  runs_dir: runs
+  models_dir: models
+
+video:
+  development_glob: "data/split/*_development.mp4"
+  test_glob: "data/split/*_test.mp4"
+
+logging:
+  level: INFO
+  log_dir: runs/logs
+
+caching:
+  enabled: true
+
+mediapipe:
+  min_hand_detection_confidence: 0.5
+  min_hand_presence_confidence: 0.5
+  min_tracking_confidence: 0.5
+  max_num_hands: 1
+  roi_padding_ratio: 0.5
+  forearm_extension_ratio: 1.2
+  max_detection_gap_sec: 1.0
+
+cotracker:
+  num_points: 40
+  visibility_threshold: 0.6
+  reinit_visibility_threshold: 0.4
+  max_reinits: 10
+  max_track_loss_sec: 2.0
+  window_frames: 100
+  working_max_dim: 1024
+
+ego_motion:
+  max_features: 200
+  quality_level: 0.01
+  min_distance: 8.0
+  roi_exclusion_dilate_px: 20
+  ransac_reproj_threshold: 3.0
+  min_inlier_ratio: 0.5
+  max_rotation_deg: 15.0
+  min_scale: 0.8
+  max_scale: 1.25
+  max_unreliable_span_sec: 2.0
+
+optical_flow:
+  pyr_scale: 0.5
+  levels: 3
+  winsize: 15
+  iterations: 3
+  poly_n: 5
+  poly_sigma: 1.2
+  motion_percentile: 75.0
+  max_flow_magnitude: 50.0
+  max_unstable_span_sec: 2.0
+
+filtering:
+  butterworth_low_hz: 1.0
+  butterworth_high_hz: 3.0
+  butterworth_order: 4
+
+estimators:
+  cwt_freq_range_hz: [1.0, 3.0]
+  cwt_wavelet: morl
+  cwt_num_scales: 80
+  fft_freq_range_hz: [1.0, 3.0]
+  autocorr_lag_range_sec: [0.3, 1.0]
+  peak_min_distance_sec: 0.35
+  peak_prominence: 0.3
+
+repnet:
+  threshold: 0.2
+  within_period_threshold: 0.5
+  strides: [1, 2, 3, 4]
+  batch_size: 4
+  constant_speed: false
+  median_filter: true
+  fully_periodic: false
+  subprocess_timeout_sec: 1800.0
+
+fusion:
+  disagreement_scale_cpm: 5.0
