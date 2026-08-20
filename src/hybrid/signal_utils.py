@@ -36,3 +36,18 @@ def longest_bad_run(is_bad: np.ndarray, timestamps: np.ndarray) -> tuple[int, fl
         if run_len > longest_frames:
             longest_frames, longest_sec = run_len, run_sec
     return longest_frames, longest_sec, periods
+
+
+def median_visible(values: np.ndarray, visibility: np.ndarray) -> np.ndarray:
+    """Per-row median of `values` restricted to columns where `visibility` is
+    True -- robust to outlier points vs. a mean. NaN for a row with no
+    visible entries. Used for aggregate motion waveforms (Phase 3's raw
+    tracker_motion_y, Phase 5's corrected_tracker_motion_y, ...).
+    """
+    t_len = values.shape[0]
+    result = np.full(t_len, np.nan)
+    for t in range(t_len):
+        visible = values[t, visibility[t]]
+        if visible.size > 0:
+            result[t] = float(np.median(visible))
+    return result

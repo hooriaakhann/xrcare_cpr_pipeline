@@ -34,7 +34,7 @@ from hybrid.exceptions import TrackLostError
 from hybrid.logging_config import get_logger
 from hybrid.mediapipe_roi import MediaPipeVideoResult, get_cotracker_init_points
 from hybrid.models import HAND_LANDMARKER
-from hybrid.signal_utils import longest_bad_run
+from hybrid.signal_utils import longest_bad_run, median_visible
 from hybrid.video_io import VideoReader
 
 logger = get_logger(__name__)
@@ -131,16 +131,10 @@ def _longest_run_below_threshold(
 
 def _median_visible_y(tracks_y: np.ndarray, visibility: np.ndarray) -> np.ndarray:
     """Median Y pixel coordinate of currently-visible points per frame --
-    the raw tracker motion waveform (robust to outlier points vs. a mean).
-    NaN for a frame with zero visible points.
+    the raw tracker motion waveform. Thin wrapper around the shared
+    `median_visible` helper (also used by Phase 5).
     """
-    t_len = tracks_y.shape[0]
-    motion = np.full(t_len, np.nan)
-    for t in range(t_len):
-        visible_y = tracks_y[t, visibility[t]]
-        if visible_y.size > 0:
-            motion[t] = float(np.median(visible_y))
-    return motion
+    return median_visible(tracks_y, visibility)
 
 
 def run_cotracker_on_video(
