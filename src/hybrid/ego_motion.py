@@ -31,6 +31,8 @@ from hybrid.config import EgoMotionConfig, HybridConfig
 from hybrid.exceptions import EgoMotionUnreliableError
 from hybrid.logging_config import get_logger
 from hybrid.mediapipe_roi import MediaPipeVideoResult, RoiBox
+from hybrid.mediapipe_roi import build_roi_lookup as _build_roi_lookup
+from hybrid.mediapipe_roi import roi_exclusion_mask as _roi_exclusion_mask
 from hybrid.models import HAND_LANDMARKER
 from hybrid.signal_utils import longest_bad_run
 from hybrid.video_io import VideoReader
@@ -63,17 +65,6 @@ class EgoMotionVideoResult:
     longest_unreliable_sec: float
 
 
-def _roi_exclusion_mask(roi: RoiBox | None, width: int, height: int, dilate_px: int) -> np.ndarray:
-    mask = np.full((height, width), 255, dtype=np.uint8)
-    if roi is not None:
-        x0 = max(0, roi.x_min - dilate_px)
-        y0 = max(0, roi.y_min - dilate_px)
-        x1 = min(width, roi.x_max + dilate_px)
-        y1 = min(height, roi.y_max + dilate_px)
-        mask[y0:y1, x0:x1] = 0
-    return mask
-
-
 def _decompose_similarity(matrix: np.ndarray) -> tuple[float, float, float, float]:
     """2x3 similarity matrix [[a,b,tx],[c,d,ty]] -> (tx, ty, rotation_rad, scale)."""
     a, _b, tx = matrix[0]
@@ -81,21 +72,6 @@ def _decompose_similarity(matrix: np.ndarray) -> tuple[float, float, float, floa
     scale = math.hypot(a, c)
     rotation_rad = math.atan2(c, a)
     return float(tx), float(ty), float(rotation_rad), float(scale)
-
-
-def _build_roi_lookup(detections) -> dict[int, RoiBox]:
-    """Per-frame ROI, forward-filled across brief MediaPipe detection gaps
-    (Phase 2 showed these are rare/short in practice) so the exclusion mask
-    stays sensible rather than reverting to "no exclusion" on every gap.
-    """
-    lookup: dict[int, RoiBox] = {}
-    last_roi: RoiBox | None = None
-    for d in sorted(detections, key=lambda x: x.frame_index):
-        if d.detected and d.roi is not None:
-            last_roi = d.roi
-        if last_roi is not None:
-            lookup[d.frame_index] = last_roi
-    return lookup
 
 
 def _estimate_frame_pair(

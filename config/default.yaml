@@ -59,3 +59,14 @@ ego_motion:
   min_scale: 0.8
   max_scale: 1.25
   max_unreliable_span_sec: 2.0
+
+optical_flow:
+  pyr_scale: 0.5
+  levels: 3
+  winsize: 15
+  iterations: 3
+  poly_n: 5
+  poly_sigma: 1.2
+  motion_percentile: 75.0
+  max_flow_magnitude: 50.0
+  max_unstable_span_sec: 2.0

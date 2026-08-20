@@ -229,6 +229,57 @@ class EgoMotionConfig(StrictModel):
         return self
 
 
+class OpticalFlowConfig(StrictModel):
+    """Farneback dense optical flow (Phase 6). Split into a foreground
+    reading (median flow within the current CPR ROI) and a background
+    reading (median flow outside it) -- never a single whole-frame mean.
+    """
+
+    pyr_scale: float = 0.5
+    levels: int = 3
+    winsize: int = 15
+    iterations: int = 3
+    poly_n: int = 5
+    poly_sigma: float = 1.2
+    # Foreground flow is the median Y-flow of only the top
+    # (100 - motion_percentile)% most-moving pixels in the ROI by magnitude
+    # -- a plain median over the whole ROI is dominated by its mostly-static
+    # majority (skin/background) and washes out the real compression signal
+    # (verified against real footage during Phase 6 development).
+    motion_percentile: float = 75.0
+    # Per-frame flow magnitude (px) beyond this is flagged unstable.
+    max_flow_magnitude: float = 50.0
+    max_unstable_span_sec: float = 2.0
+
+    @field_validator("pyr_scale")
+    @classmethod
+    def _pyr_scale_range(cls, v: float) -> float:
+        if not 0.0 < v < 1.0:
+            raise ValueError(f"pyr_scale must be in (0.0, 1.0), got {v}")
+        return v
+
+    @field_validator("motion_percentile")
+    @classmethod
+    def _motion_percentile_range(cls, v: float) -> float:
+        if not 0.0 <= v < 100.0:
+            raise ValueError(f"motion_percentile must be in [0.0, 100.0), got {v}")
+        return v
+
+    @field_validator("levels", "winsize", "iterations", "poly_n")
+    @classmethod
+    def _positive_int(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"must be >= 1, got {v}")
+        return v
+
+    @field_validator("poly_sigma", "max_flow_magnitude", "max_unstable_span_sec")
+    @classmethod
+    def _positive_float(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"must be > 0.0, got {v}")
+        return v
+
+
 class HybridConfig(StrictModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -238,6 +289,7 @@ class HybridConfig(StrictModel):
     mediapipe: MediaPipeConfig = Field(default_factory=MediaPipeConfig)
     cotracker: CoTrackerConfig = Field(default_factory=CoTrackerConfig)
     ego_motion: EgoMotionConfig = Field(default_factory=EgoMotionConfig)
+    optical_flow: OpticalFlowConfig = Field(default_factory=OpticalFlowConfig)
 
     def config_hash(self) -> str:
         """Short hash of the fully-resolved config, for cache keys and the experiment ledger."""

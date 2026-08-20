@@ -82,6 +82,37 @@ class MediaPipeVideoResult:
     model_sha256: str
 
 
+def roi_exclusion_mask(roi: RoiBox | None, width: int, height: int, dilate_px: int = 0) -> np.ndarray:
+    """255 everywhere except 0 inside `roi` (dilated by `dilate_px`). Used to
+    keep CPR foreground pixels out of background-only computations (Phase 4
+    feature detection, Phase 6 background flow reading).
+    """
+    mask = np.full((height, width), 255, dtype=np.uint8)
+    if roi is not None:
+        x0 = max(0, roi.x_min - dilate_px)
+        y0 = max(0, roi.y_min - dilate_px)
+        x1 = min(width, roi.x_max + dilate_px)
+        y1 = min(height, roi.y_max + dilate_px)
+        mask[y0:y1, x0:x1] = 0
+    return mask
+
+
+def build_roi_lookup(detections: list[HandDetection]) -> dict[int, RoiBox]:
+    """Per-frame ROI, forward-filled across brief MediaPipe detection gaps
+    (Phase 2 showed these are rare/short in practice) so downstream branches
+    (Phase 4 ego-motion, Phase 6 optical flow) get a sensible ROI rather than
+    "no exclusion" on every gap.
+    """
+    lookup: dict[int, RoiBox] = {}
+    last_roi: RoiBox | None = None
+    for d in sorted(detections, key=lambda x: x.frame_index):
+        if d.detected and d.roi is not None:
+            last_roi = d.roi
+        if last_roi is not None:
+            lookup[d.frame_index] = last_roi
+    return lookup
+
+
 def _landmarks_to_pixels(landmarks, width: int, height: int) -> tuple[tuple[float, float], ...]:
     return tuple((lm.x * width, lm.y * height) for lm in landmarks)
 
