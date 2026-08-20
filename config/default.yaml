@@ -17,6 +17,7 @@ paths:
   ground_truth_csv: data/metadata/ground_truth_summary.csv
   cache_dir: data/cache
   runs_dir: runs
+  models_dir: models
 
 video:
   development_glob: "data/split/*_development.mp4"
@@ -28,3 +29,12 @@ logging:
 
 caching:
   enabled: true
+
+mediapipe:
+  min_hand_detection_confidence: 0.5
+  min_hand_presence_confidence: 0.5
+  min_tracking_confidence: 0.5
+  max_num_hands: 1
+  roi_padding_ratio: 0.5
+  forearm_extension_ratio: 1.2
+  max_detection_gap_sec: 1.0

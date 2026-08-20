@@ -10,9 +10,10 @@ requires-python = ">=3.10,<3.11"
 readme = "README.md"
 dependencies = [
     "numpy",
-    "opencv-python",
+    "opencv-contrib-python",
     "pydantic>=2",
     "pyyaml",
+    "mediapipe",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +28,9 @@ packages = ["src/hybrid"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: real model inference / downloads / real-video I/O — excluded from `make test` by default, run with `make test-all`",
+]
 
 [tool.ruff]
 line-length = 120

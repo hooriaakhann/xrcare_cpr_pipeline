@@ -84,7 +84,7 @@ def map_split_filename_to_gt_key(split_filename: str) -> str:
     match = _SPLIT_SUFFIX_RE.match(p.stem)
     if match is None:
         raise GroundTruthMappingError(
-            f"Cannot map {split_filename!r} to a ground-truth row: stem does not end in " f"'_development' or '_test'"
+            f"Cannot map {split_filename!r} to a ground-truth row: stem does not end in '_development' or '_test'"
         )
     return f"{match.group('video_id')}{p.suffix}"
 

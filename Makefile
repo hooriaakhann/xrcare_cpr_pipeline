@@ -1,4 +1,4 @@
-.PHONY: install lint format test precommit clean
+.PHONY: install lint format test test-all precommit clean
 
 VENV_PY := .venv/Scripts/python
 
@@ -13,6 +13,9 @@ format:
 	$(VENV_PY) -m ruff format .
 
 test:
+	$(VENV_PY) -m pytest -m "not slow"
+
+test-all:
 	$(VENV_PY) -m pytest
 
 precommit:

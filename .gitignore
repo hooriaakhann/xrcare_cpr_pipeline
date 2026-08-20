@@ -45,3 +45,8 @@ Thumbs.db
 # --- Isolated ML environments (ADR 0003, not yet written) ---
 .venv-torch/
 .venv-tf/
+
+# --- Pretrained model checkpoints (large binaries, fetched on demand and
+# pinned by URL + sha256 in src/hybrid/models.py — never fine-tuned, see
+# CLAUDE.md rule 4) ---
+models/
