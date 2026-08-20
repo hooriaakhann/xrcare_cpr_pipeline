@@ -38,3 +38,12 @@ mediapipe:
   roi_padding_ratio: 0.5
   forearm_extension_ratio: 1.2
   max_detection_gap_sec: 1.0
+
+cotracker:
+  num_points: 40
+  visibility_threshold: 0.6
+  reinit_visibility_threshold: 0.4
+  max_reinits: 10
+  max_track_loss_sec: 2.0
+  window_frames: 100
+  working_max_dim: 1024

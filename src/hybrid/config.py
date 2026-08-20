@@ -105,6 +105,67 @@ class MediaPipeConfig(StrictModel):
         return v
 
 
+class CoTrackerConfig(StrictModel):
+    """Multi-point tracking branch (Phase 3). The pretrained CoTracker3
+    "offline" model holds its whole input video tensor in memory at once, so
+    videos are processed in memory-bounded temporal windows rather than a
+    single call over the full video (this machine has 16GB RAM, no GPU).
+    """
+
+    num_points: int = 40
+    # A frame's tracked points are "valid" when the visible ratio is at or
+    # above this; used for track-loss-period detection.
+    visibility_threshold: float = 0.6
+    # End-of-window visible ratio below this triggers a MediaPipe reinit
+    # (fresh query points) for the next window.
+    reinit_visibility_threshold: float = 0.4
+    max_reinits: int = 10
+    # Longest allowed contiguous run of visibility below visibility_threshold
+    # before raising TrackLostError (checked after all reinits are spent).
+    max_track_loss_sec: float = 2.0
+    window_frames: int = 100
+    # Frames are resized so max(H, W) <= this before feeding CoTracker
+    # (memory/speed; the model downsamples internally regardless).
+    working_max_dim: int = 1024
+
+    @field_validator("num_points")
+    @classmethod
+    def _positive_num_points(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"num_points must be >= 1, got {v}")
+        return v
+
+    @field_validator("visibility_threshold", "reinit_visibility_threshold")
+    @classmethod
+    def _in_unit_interval(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"must be in [0.0, 1.0], got {v}")
+        return v
+
+    @field_validator("window_frames", "working_max_dim")
+    @classmethod
+    def _positive_int(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"must be >= 1, got {v}")
+        return v
+
+    @field_validator("max_reinits")
+    @classmethod
+    def _non_negative_int(cls, v: int) -> int:
+        # 0 is a legitimate value -- it means "never reinitialize", useful
+        # for ablations that isolate the effect of the reinit mechanism.
+        if v < 0:
+            raise ValueError(f"must be >= 0, got {v}")
+        return v
+
+    @field_validator("max_track_loss_sec")
+    @classmethod
+    def _non_negative(cls, v: float) -> float:
+        if v < 0.0:
+            raise ValueError(f"must be >= 0.0, got {v}")
+        return v
+
+
 class HybridConfig(StrictModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -112,6 +173,7 @@ class HybridConfig(StrictModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     caching: CachingConfig = Field(default_factory=CachingConfig)
     mediapipe: MediaPipeConfig = Field(default_factory=MediaPipeConfig)
+    cotracker: CoTrackerConfig = Field(default_factory=CoTrackerConfig)
 
     def config_hash(self) -> str:
         """Short hash of the fully-resolved config, for cache keys and the experiment ledger."""

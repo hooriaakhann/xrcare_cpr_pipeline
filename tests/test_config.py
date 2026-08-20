@@ -44,3 +44,41 @@ def test_config_hash_is_stable_and_sensitive_to_changes():
     c = load_config()
     c.project.seed = 999
     assert c.config_hash() != a.config_hash()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"min_hand_detection_confidence": 1.5},
+        {"min_hand_detection_confidence": -0.1},
+        {"max_num_hands": 0},
+        {"roi_padding_ratio": -1.0},
+        {"max_detection_gap_sec": -1.0},
+    ],
+)
+def test_mediapipe_config_rejects_invalid_values(overrides):
+    with pytest.raises(ValidationError):
+        HybridConfig(mediapipe=overrides)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"num_points": 0},
+        {"visibility_threshold": 1.5},
+        {"reinit_visibility_threshold": -0.1},
+        {"max_reinits": -1},
+        {"window_frames": 0},
+        {"working_max_dim": 0},
+        {"max_track_loss_sec": -1.0},
+    ],
+)
+def test_cotracker_config_rejects_invalid_values(overrides):
+    with pytest.raises(ValidationError):
+        HybridConfig(cotracker=overrides)
+
+
+def test_cotracker_config_allows_zero_max_reinits():
+    # 0 is legitimate -- disables reinitialization entirely (ablation use case).
+    config = HybridConfig(cotracker={"max_reinits": 0})
+    assert config.cotracker.max_reinits == 0
