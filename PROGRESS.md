@@ -338,3 +338,32 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 **Runtime observation:** cold per-video runtime is ~800-1220s (13-20 min), dominated by CoTracker and optical flow as expected from Phases 3/6's individual findings; cached re-runs are near-instant. A full cold 6-video pass is therefore roughly an hour of wall-clock compute on this CPU-only machine.
 
 **Next phase:** Phase 14 — Ablation Comparison.
+
+---
+
+## Phase 14 — Ablation Comparison (done)
+
+**`src/hybrid/ablation.py`:** scores 8 sub-pipelines (A-H, per spec) against development MAE/RMSE. A-F all reuse the **already-cached** MediaPipe/CoTracker/ego-motion/optical-flow branch outputs from Phase 13 — nothing expensive re-runs, only the cheap Phase 7-9 steps (fusion/filtering/estimation) on each alternative signal. A-F's four classical estimators are combined with **Phase 12's own `fuse_estimates()`** (RepNet excluded via a null candidate) rather than an ad hoc average, so every ablation's single CPM comes from the same fusion methodology the real pipeline uses — an apples-to-apples comparison. G (RepNet alone) reads its own `cpm` directly, no filtering needed. H (full hybrid) reuses Phase 13's already-computed `VideoEvaluationResult` unchanged. A bootstrap 95% CI (same `_bootstrap_mae_ci` as Phase 13) is reported per ablation row, and a paired Wilcoxon signed-rank test compares H against the best-performing single-branch ablation — both per spec.
+
+**Tests (`tests/test_ablation.py`, 9 tests):** wrist-signal NaN-gap extraction, the null-RepNet helper, `_cpm_from_signal` recovering a known synthetic frequency through the real filter+estimate+fuse chain (not mocked), all-8-ablations-produced with synthetic-but-genuinely-oscillating branch fixtures (mocked at the cached-call boundary), RepNet-`None` handled without crashing the rest, `summarize_ablations` aggregation/sorting/missing-video notes, and `wilcoxon_hybrid_vs_best_ablation` picking the right comparator plus its too-few-paired-videos edge case. Full suite: **196/199 tests passing** at the time (3 slow deselected), ruff clean.
+
+**Real-data results — all 8 ablations, all 6 development videos (fast: everything reused from Phase 13's cache, total runtime under a second):**
+
+| Ablation | Dev MAE | 95% CI | RMSE | Notes |
+|---|---:|---:|---:|---|
+| D — Optical flow (raw foreground) | 1.74 | [0.69, 3.00] | 2.26 | best single branch |
+| E — Optical flow (affine-compensated) | 1.75 | [0.70, 3.01] | 2.27 | essentially tied with D |
+| **H — Full hybrid** | **1.98** | **[1.16, 2.66]** | **2.20** | |
+| F — Tracker + flow fused (no RepNet) | 2.05 | [0.58, 3.74] | 2.88 | |
+| A — MediaPipe wrist only | 2.53 | [1.16, 3.97] | 3.08 | |
+| B — CoTracker (raw) | 4.14 | [1.95, 6.69] | 5.13 | |
+| C — CoTracker + affine compensation | 11.71 | [2.50, 26.34] | 19.76 | one catastrophic video, see below |
+| G — RepNet alone | 16.54 | [7.04, 26.34] | 20.54 | |
+
+**Wilcoxon (H vs. D, the best single-branch ablation): statistic=9.0, p=0.844 (n=6 paired videos) — not significant.** Reported honestly: with only 6 dev videos, this test has very little power (spec's own caution, verified in practice) — it does **not** support a claim that the full hybrid is statistically better (or worse) than raw optical flow alone on this dev set. What the numbers *do* show, without needing a significance test: **H (1.98) beats F (2.05)** — including RepNet in the fusion produced a small net-positive effect on aggregate MAE even though RepNet alone (G, 16.54) is by far the least accurate individual branch. That's the confidence-weighted, disagreement-aware design (ADR 0004) doing its job — RepNet gets discounted enough not to hurt, and its independent signal still nudges the average in the right direction on the videos where the classical branches agree less.
+
+**Investigated, not just reported — why C (11.71 MAE) is so much worse than B (4.14 MAE), the same trajectory just with ego-motion correction applied:** per-video breakdown showed 5 of 6 videos have C comparable to or *better* than B; `video2_development.mp4` alone has a catastrophic C error of **46.64 CPM** (predicted 115.87 vs. GT 69.23), which single-handedly drags the aggregate. Traced to its root cause: video2's per-frame ego-motion estimates are individually tiny and near-unbiased (scale 0.979-1.026, mean 1.00016; rotation -0.25 deg to +0.17 deg, mean 0.002 deg — 779/780 frames passed validity checks) — but Phase 5's cumulative composition has **no loop closure or bundle adjustment** (flagged as a theoretical risk in Phase 5's own PROGRESS entry) and by mid-video the compounded random walk reaches a **580px cumulative translation** and **1.19x cumulative scale** drift relative to frame 0's reference frame — never large enough per-step to trip the `>3x`/`<1/3x` drift-warning check, but plenty to badly distort the corrected trajectory's periodicity by the video's second half. This is real evidence for a limitation that was previously only a documented concern, not yet observed. It's contained (F's fused signal, which includes this same corrected-tracker branch, doesn't inherit the catastrophic failure, because Phase 7's confidence weighting lets the optical-flow branch carry more weight where the tracker branch struggles) but worth carrying into Phase 15 as a tuning candidate (e.g. a tighter `min_inlier_ratio`, or a periodic re-anchoring/reset of the cumulative composition) rather than something to silently work around now.
+
+**Decisions:** (1) Reusing Phase 12's `fuse_estimates()` for ablations A-F (via a null RepNet candidate) instead of a bespoke aggregation rule — keeps every ablation's number produced by the same methodology as the real pipeline. (2) Investigated the C-ablation anomaly to a specific, evidenced root cause rather than reporting "C performs worse" as an unexplained aggregate number — the difference between "ego-motion correction sometimes hurts" (true) and "ego-motion correction catastrophically fails on one specific video via a previously-theoretical drift mechanism, now confirmed" (much more actionable) is exactly the kind of thing an ablation study exists to surface.
+
+**Next phase:** Phase 15 — Parameter Tuning.
