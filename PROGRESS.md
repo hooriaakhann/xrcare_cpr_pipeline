@@ -401,3 +401,16 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 **Decisions:** (1) `filtered_signal.csv` kept separate from `signals.csv` rather than merged — they're on genuinely different time grids (Phase 7's per-frame VFR timestamps vs. Phase 8's uniform resampled grid) and forcing them into one row-aligned file would have been misleading. (2) Diagnostics saving reuses cached branch calls rather than accepting a pre-computed result bundle from Phase 13 — costs a few redundant Python-level calls (all cache hits) in exchange for `diagnostics.py` not needing to know about every other module's internal result-object shape beyond what it directly writes out.
 
 **Next phase:** Phase 17 — Suggested Code Structure (review only — the modular `src/hybrid/` layout has been followed since Phase 1; no restructuring needed).
+
+---
+
+## Phase 17 — Suggested Code Structure (review, no code changes)
+
+**Reviewed against spec's suggested tree — modular by construction since Phase 1, no restructuring needed.** `src/hybrid/` has one module per pipeline stage (25 files: `video_io`, `dataset`, `mediapipe_roi`, `cotracker_tracker`, `ego_motion`, `corrected_trajectory`, `optical_flow`, `motion_wave`, `filters`, `estimators`, `repnet_branch`, `confidence`, `fusion`, `evaluation`, `ablation`, `diagnostics`, `run_development`, plus the Phase 0.5 scaffolding — `config`, `logging_config`, `exceptions`, `caching`, `experiment_ledger`, `models`, `signal_utils`) — never one giant file, matching spec's explicit instruction. `src/repnet_env/` (3 files: `model.py`, `checkpoint_mapping.py`, `run_repnet.py`) is the one deliberate deviation from the suggested tree, and an intentional one: it's vendored code that runs under a *different* Python interpreter (`.venv-tf`) than the rest of `src/hybrid/`, so it was kept as a clearly-separate top-level package rather than nested inside `src/hybrid/` where it would misleadingly suggest it's importable from the main venv (documented in Phase 10's PROGRESS entry and ADR 0003).
+
+**Documented deviations from the spec's literal suggested tree**, each already explained at the phase that made the choice:
+- Flat `tests/` rather than `tests/unit/` + `tests/integration/` — established in Phase 0.5, kept for consistency through every subsequent phase rather than fragmenting the directory for one or two files; spec explicitly allows adjusting its suggested structure.
+- No `docker/` directory — ADR 0003 chose virtualenv+subprocess over Docker for RepNet isolation, so there's nothing to containerize (Phase 0.5's `docker/` suggestion was conditional on that choice going the other way).
+- `hybrid.run_development` (Phase 18) instead of a separate `hybrid.cli`/typer-based entrypoint — a plain `argparse` CLI was sufficient for what Phase 18 needs (the test-safety guard + running the dev-set pipeline); a fuller CLI framework is Phase 21's optional stretch item, not required here.
+
+**Next phase:** Phase 18 — Test-Safety Rule.
