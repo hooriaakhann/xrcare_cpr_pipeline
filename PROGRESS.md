@@ -384,6 +384,68 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 
 **Update — user approved a small targeted sweep** on exactly the 2 candidates above (not the broader systematic option). Sweep results are reported in a follow-up entry below once complete, appended to the experiment ledger with `phase="parameter_tuning"` per config tried (per spec: "every tuning iteration must be appended to the experiment ledger — config hash, which parameter(s) changed, resulting dev MAE/RMSE").
 
+**Sweep results (candidate 1 — ego-motion validity bounds):** tested `min_inlier_ratio` in
+{0.5 (baseline), 0.65, 0.8} and `(min_scale, max_scale)` in {(0.8,1.25) (baseline), (0.9,1.1),
+(0.95,1.05)}, full dev-set re-evaluation per value, every iteration logged to the ledger.
+
+- **`min_scale`/`max_scale`: bit-for-bit zero effect at every tested value.** Traced this to
+  how the "reliable" flag is actually consumed: `FrameEgoMotion.transform_valid` (the AND of
+  all three bound checks) never gates or excludes a frame's transform from Phase 5's cumulative
+  composition — every frame's fitted transform is applied regardless. It only feeds (a) a
+  per-frame `confidence` value (0.0 when invalid) that becomes Phase 7's `tracker_weight`, and
+  (b) a video-level `max_unreliable_span_sec` check that can raise `EgoMotionUnreliableError`.
+  Real RANSAC-fit scale values on this dataset cluster tightly around 0.97-1.03 frame-to-frame
+  (see the raw warning log from this sweep) — tight enough that even the strictest tested bound
+  (0.95-1.05) essentially never flags a frame that `min_inlier_ratio`/`max_rotation_deg` hadn't
+  already flagged. Not a bug: a genuine, evidence-backed finding that scale drift bounds are
+  non-binding for this dataset's actual noise profile, and `min_inlier_ratio` is the real
+  gatekeeper. **Not adopted** — nothing to adopt, the parameter has no effect to tune here.
+- **`min_inlier_ratio=0.8`:** aggregate dev MAE barely moved (1.976 -> 1.957), RMSE got
+  slightly *worse* (2.199 -> 2.255), and `min_inlier_ratio=0.65` (between the two) was worse
+  than baseline on both (MAE 2.037, RMSE 2.276) — a non-monotonic result across the 3 tested
+  points. The full per-video breakdown at 0.8 explains why: `video2` (the known catastrophic
+  ego-motion-drift case from Phase 14) improved substantially (signed error -1.22 -> -0.66,
+  via `tracker_weight` dropping to 0 on more of its low-inlier-ratio frames and the fused wave
+  leaning more on optical flow instead) — but `video4` got worse (-2.67 -> -3.09), because
+  video4's own low-inlier-ratio frames (concentrated in its first ~1s, see Phase 4/6
+  diagnostics) turned out to still carry real, useful signal that down-weighting cost it.
+  Confirmed mechanism, not a fluke — but a real per-video trade-off, not a uniform win.
+  **Not adopted**, per the "conservative given small sample size" framing: helps one video,
+  hurts another, and the net aggregate change (+/-0.02 MAE) is far inside the noise floor of a
+  6-video bootstrap CI. `ego_motion.min_inlier_ratio` stays at its original default, 0.5.
+
+**Sweep results (candidate 2 — `fusion.disagreement_scale_cpm`):** tested {5.0, 10.0
+(baseline), 15.0, 20.0}, full dev-set re-evaluation per value, every iteration logged.
+
+| disagreement_scale_cpm | dev MAE | dev RMSE |
+|---:|---:|---:|
+| 5.0 | **1.778** | **2.117** |
+| 10.0 (old default) | 1.976 | 2.199 |
+| 15.0 | 2.120 | 2.321 |
+| 20.0 | 2.232 | 2.446 |
+
+A clean, monotonic trend across all four tested points: smaller `disagreement_scale_cpm`
+(stronger discounting of any candidate estimate that disagrees with the confidence-weighted
+consensus) improves both MAE and RMSE, with 5.0 -- the smallest value tested -- the best.
+Mechanistically consistent with ADR 0004's own finding (RepNet is the branch most likely to
+diverge from consensus, per its known zero-shot domain mismatch, Phase 10/12) and with the
+per-video breakdown: `video2`, `video3`, `video4` all improved at scale=5.0, at a small cost to
+`video1`/`video9` (already positively biased, nudged slightly further positive). **Adopted:
+`fusion.disagreement_scale_cpm` changed from 10.0 to 5.0 in `config/default.yaml`.** Stopping
+at 5.0 rather than testing smaller values still, even though the trend hadn't visibly
+plateaued -- the approved sweep scope was these 4 specific values, and going further would be
+exactly the "larger sweep" the original stop-and-ask exception was about.
+
+**Re-ran the full development evaluation and Phase 16 diagnostics with the adopted config**
+(disagreement_scale_cpm=5.0, everything else unchanged) to produce the new canonical numbers:
+dev MAE = **1.778 CPM** (95% CI [0.883, 2.680]), RMSE = **2.117**, mean signed error = **+0.317**
+(still essentially unbiased, sign flipped from Phase 13's -0.112 but both are small relative to
+the CI width). Full updated per-video table now in `README.md`. **Phase 13/14's own PROGRESS
+entries and the ablation/Wilcoxon numbers were intentionally left as-is** (computed under the
+old default) rather than rerun -- re-running the full 8-arm ablation study was outside the
+approved 2-candidate sweep scope; the ablation's structural conclusions don't depend on this
+one scalar, only its exact MAE figures do, and that's now flagged in `README.md`.
+
 **Next phase:** Phase 16 — Save Diagnostics.
 
 ---
@@ -498,5 +560,10 @@ entries rather than a screenshot.
 expected or found).
 
 **Next phase:** Phase 21 — Optional Stretch Polish (lower priority; time-permitting only, per
-spec). Phase 15's targeted parameter sweep (approved by the user, in progress) still owes a
-follow-up entry with before/after dev MAE/RMSE once it completes.
+spec).
+
+**Update:** Phase 15's targeted parameter sweep (see its own entry above) completed after this
+phase's commit and changed the fusion default (`disagreement_scale_cpm` 10.0 -> 5.0), which
+changes the pipeline's actual output. `README.md`'s results table was updated a second time in
+a follow-up commit to keep the documentation-phase deliverable in sync with the config it's
+describing, rather than leaving Phase 20's docs describing a config the repo no longer ships.

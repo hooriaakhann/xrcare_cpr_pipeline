@@ -96,4 +96,4 @@ repnet:
   subprocess_timeout_sec: 1800.0
 
 fusion:
-  disagreement_scale_cpm: 10.0
+  disagreement_scale_cpm: 5.0

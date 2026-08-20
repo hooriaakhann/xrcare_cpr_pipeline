@@ -25,6 +25,13 @@ of a mean.
 RepNet's raw confidence (0.662) alone would have given it a non-trivial say in the average;
 factoring in that its estimate (92.66) sat far from the other four's consensus (~105) dropped
 its effective fusion weight to 0.285 — the mechanism visibly doing its job on a real video,
-not just the synthetic unit test. `disagreement_scale_cpm` (default 10.0) is a first-pass
-default, not yet tuned (Phase 15's job) — it controls how many CPM of deviation from center
-is treated as "meaningfully disagreeing" before the discount kicks in materially.
+not just the synthetic unit test. `disagreement_scale_cpm` controls how many CPM of deviation
+from center is treated as "meaningfully disagreeing" before the discount kicks in materially.
+
+**Update (Phase 15):** the initial default of 10.0 was a first-pass, untuned value. A targeted
+sweep over {5.0, 10.0, 15.0, 20.0} on the development set showed a clean, monotonic trend —
+smaller values (more aggressive disagreement discounting) improved both MAE and RMSE at every
+tested point, with 5.0 the best of the four (dev MAE 1.976 -> 1.778, RMSE 2.199 -> 2.117).
+Adopted as the new default. See PROGRESS.md's Phase 15 sweep-results entry for the full
+per-video breakdown and the reasoning for stopping at 5.0 rather than sweeping smaller values
+still (the approved sweep scope was these 4 values, not an open-ended search).
