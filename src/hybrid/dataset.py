@@ -89,24 +89,23 @@ def map_split_filename_to_gt_key(split_filename: str) -> str:
     return f"{match.group('video_id')}{p.suffix}"
 
 
-def discover_development_videos(config: HybridConfig) -> list[DevVideo]:
-    """Every development-split video matched to its ground-truth row.
+def _discover_split_videos(config: HybridConfig, glob_pattern: str, split_label: str) -> list[DevVideo]:
+    """Shared body for `discover_development_videos`/`discover_test_videos`.
 
-    The glob's directory comes from `config.paths.split_dir` (already
-    resolved absolute); the filename pattern comes from
-    `config.video.development_glob`, so both stay config-driven per the
-    engineering standards rather than hardcoding either.
+    `DevVideo` is reused as the return type for test videos too -- its
+    fields (video_id, split_path, gt) aren't development-specific, and a
+    structurally identical `TestVideo` dataclass would just duplicate it.
     """
     gt_rows = load_ground_truth(config.paths.ground_truth_csv)
 
-    name_pattern = Path(config.video.development_glob).name
+    name_pattern = Path(glob_pattern).name
     pattern = str(config.paths.split_dir / name_pattern)
     paths = sorted(Path(p) for p in glob.glob(pattern))
 
     if not paths:
-        raise VideoReadError(f"No development videos found matching {pattern!r}")
+        raise VideoReadError(f"No {split_label} videos found matching {pattern!r}")
 
-    dev_videos: list[DevVideo] = []
+    videos: list[DevVideo] = []
     seen_ids: set[str] = set()
     for path in paths:
         gt_key = map_split_filename_to_gt_key(path.name)
@@ -119,7 +118,28 @@ def discover_development_videos(config: HybridConfig) -> list[DevVideo]:
         if video_id in seen_ids:
             raise GroundTruthMappingError(f"Duplicate video id {video_id!r} discovered from {path}")
         seen_ids.add(video_id)
-        dev_videos.append(DevVideo(video_id=video_id, split_path=path, gt=gt_rows[gt_key]))
+        videos.append(DevVideo(video_id=video_id, split_path=path, gt=gt_rows[gt_key]))
         logger.info("Mapped %s -> GT row %s (gt_cpm=%.4f)", path.name, gt_key, gt_rows[gt_key].gt_cpm)
 
-    return dev_videos
+    return videos
+
+
+def discover_development_videos(config: HybridConfig) -> list[DevVideo]:
+    """Every development-split video matched to its ground-truth row.
+
+    The glob's directory comes from `config.paths.split_dir` (already
+    resolved absolute); the filename pattern comes from
+    `config.video.development_glob`, so both stay config-driven per the
+    engineering standards rather than hardcoding either.
+    """
+    return _discover_split_videos(config, config.video.development_glob, "development")
+
+
+def discover_test_videos(config: HybridConfig) -> list[DevVideo]:
+    """Every held-out test-split video matched to its ground-truth row.
+
+    Mirrors `discover_development_videos`, using `config.video.test_glob`.
+    Only `hybrid.run_test` may call this -- CLAUDE.md rules 1-2, enforced
+    there by `guard_test_only`, not by this function.
+    """
+    return _discover_split_videos(config, config.video.test_glob, "test")

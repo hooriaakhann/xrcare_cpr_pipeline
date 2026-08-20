@@ -3,6 +3,7 @@ import pytest
 from hybrid.config import HybridConfig
 from hybrid.dataset import (
     discover_development_videos,
+    discover_test_videos,
     load_ground_truth,
     map_split_filename_to_gt_key,
 )
@@ -132,3 +133,52 @@ def test_discover_development_videos_never_touches_test_split(tmp_path):
 
     assert len(dev_videos) == 1
     assert "test" not in dev_videos[0].split_path.name
+
+
+def test_discover_test_videos_maps_and_sorts(tmp_path):
+    config, split_dir, gt_csv = _make_config(tmp_path)
+    _write_gt_csv(
+        gt_csv,
+        [
+            "video5.mp4,4.0,24.0,20.0,30,90.0,",
+            "video6.mp4,3.0,29.0,26.0,30,69.2308,",
+        ],
+    )
+    (split_dir / "video6_test.mp4").write_bytes(b"")
+    (split_dir / "video5_test.mp4").write_bytes(b"")
+    (split_dir / "video1_development.mp4").write_bytes(b"")  # must be ignored — dev split
+
+    test_videos = discover_test_videos(config)
+
+    assert [v.video_id for v in test_videos] == ["video5", "video6"]
+    assert test_videos[0].gt.gt_cpm == pytest.approx(90.0)
+    assert test_videos[1].split_path.name == "video6_test.mp4"
+
+
+def test_discover_test_videos_missing_gt_row_raises(tmp_path):
+    config, split_dir, gt_csv = _make_config(tmp_path)
+    _write_gt_csv(gt_csv, ["video5.mp4,4.0,24.0,20.0,30,90.0,"])
+    (split_dir / "video99_test.mp4").write_bytes(b"")
+
+    with pytest.raises(GroundTruthMappingError):
+        discover_test_videos(config)
+
+
+def test_discover_test_videos_no_files_raises(tmp_path):
+    config, split_dir, gt_csv = _make_config(tmp_path)
+    _write_gt_csv(gt_csv, ["video5.mp4,4.0,24.0,20.0,30,90.0,"])
+
+    with pytest.raises(VideoReadError):
+        discover_test_videos(config)
+
+
+def test_discover_test_videos_never_touches_development_split(tmp_path):
+    config, split_dir, gt_csv = _make_config(tmp_path)
+    _write_gt_csv(gt_csv, ["video5.mp4,4.0,24.0,20.0,30,90.0,"])
+    (split_dir / "video5_test.mp4").write_bytes(b"")
+    (split_dir / "video5_development.mp4").write_bytes(b"")
+
+    test_videos = discover_test_videos(config)
+
+    assert len(test_videos) == 1
+    assert "development" not in test_videos[0].split_path.name
