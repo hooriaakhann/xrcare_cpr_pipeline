@@ -50,3 +50,8 @@ class OpticalFlowUnstableError(HybridError):
 
 class RepNetUnavailableError(HybridError):
     """The isolated RepNet subprocess/environment could not be reached or failed."""
+
+
+class FilteringError(HybridError):
+    """The Butterworth band-pass filter could not be applied (invalid band
+    for the video's sample rate, too few samples, all-NaN signal, ...)."""

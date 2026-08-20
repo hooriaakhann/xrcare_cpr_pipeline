@@ -280,6 +280,42 @@ class OpticalFlowConfig(StrictModel):
         return v
 
 
+class FilteringConfig(StrictModel):
+    """Butterworth band-pass filter (Phase 8). Defaults (1.0-3.0 Hz = 60-180
+    CPM) deliberately bracket this dev set's observed GT range (69-106 CPM,
+    see PROGRESS.md Phase 0) with generous headroom on both sides -- a
+    physiologically-motivated clinical range, not fitted tightly to the dev
+    videos, since the band must also generalize to the held-out test set.
+    """
+
+    butterworth_low_hz: float = 1.0
+    butterworth_high_hz: float = 3.0
+    butterworth_order: int = 4
+
+    @field_validator("butterworth_low_hz", "butterworth_high_hz")
+    @classmethod
+    def _positive(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"must be > 0.0, got {v}")
+        return v
+
+    @field_validator("butterworth_order")
+    @classmethod
+    def _positive_order(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"butterworth_order must be >= 1, got {v}")
+        return v
+
+    @model_validator(mode="after")
+    def _low_less_than_high(self) -> FilteringConfig:
+        if self.butterworth_low_hz >= self.butterworth_high_hz:
+            raise ValueError(
+                f"butterworth_low_hz ({self.butterworth_low_hz}) must be < "
+                f"butterworth_high_hz ({self.butterworth_high_hz})"
+            )
+        return self
+
+
 class HybridConfig(StrictModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -290,6 +326,7 @@ class HybridConfig(StrictModel):
     cotracker: CoTrackerConfig = Field(default_factory=CoTrackerConfig)
     ego_motion: EgoMotionConfig = Field(default_factory=EgoMotionConfig)
     optical_flow: OpticalFlowConfig = Field(default_factory=OpticalFlowConfig)
+    filtering: FilteringConfig = Field(default_factory=FilteringConfig)
 
     def config_hash(self) -> str:
         """Short hash of the fully-resolved config, for cache keys and the experiment ledger."""

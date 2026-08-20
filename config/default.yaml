@@ -70,3 +70,8 @@ optical_flow:
   motion_percentile: 75.0
   max_flow_magnitude: 50.0
   max_unstable_span_sec: 2.0
+
+filtering:
+  butterworth_low_hz: 1.0
+  butterworth_high_hz: 3.0
+  butterworth_order: 4
