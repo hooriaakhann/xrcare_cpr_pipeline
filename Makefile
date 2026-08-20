@@ -1,4 +1,4 @@
-.PHONY: install install-repnet lint format test test-all precommit clean
+.PHONY: install install-repnet lint format test test-all coverage precommit clean
 
 VENV_PY := .venv/Scripts/python
 VENV_TF_PY := .venv-tf/Scripts/python
@@ -26,6 +26,9 @@ test:
 
 test-all:
 	$(VENV_PY) -m pytest
+
+coverage:
+	$(VENV_PY) -m pytest -m "not slow" --cov=src/hybrid --cov-report=term-missing
 
 precommit:
 	$(VENV_PY) -m pre_commit run --all-files

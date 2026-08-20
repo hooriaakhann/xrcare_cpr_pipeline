@@ -27,5 +27,5 @@ jobs:
       - name: Format check (ruff)
         run: ruff format --check .
 
-      - name: Test (pytest, excluding slow/model-download tests)
-        run: pytest -m "not slow"
+      - name: Test + coverage (pytest, excluding slow/model-download tests)
+        run: pytest -m "not slow" --cov=src/hybrid --cov-report=term-missing

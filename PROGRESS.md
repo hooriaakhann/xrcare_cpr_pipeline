@@ -426,3 +426,19 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 **Decisions:** (1) Renamed the guard exception from `TestVideoGuardError` to `HeldOutVideoError` mid-implementation — pytest's collector treats any class matching `Test*` as a candidate test class, and a `HybridError` subclass with an inherited `__init__` triggered a `PytestCollectionWarning` on every test run referencing it. Not a functional bug, but noisy; renamed rather than suppressing the warning, since `HeldOutVideoError` is arguably the more accurate name anyway (rule 1-2 is about the *held-out test set*, not merely "test" in the software-testing sense). (2) A failed video logs and continues to the next one rather than aborting the whole run — partial results from a partial failure are still useful, and this matches the "fail gracefully" principle already established throughout Phases 2-12's per-branch error handling.
 
 **Next phase:** Phase 19 — Testing & CI.
+
+---
+
+## Phase 19 — Testing & CI (done)
+
+**Mostly already satisfied incrementally** — every phase since 0.5 kept `ruff check`/`ruff format --check`/the fast test suite green before committing, so this phase's job was to wire the pieces spec explicitly calls out that weren't yet formalized: coverage reporting and one true end-to-end integration test.
+
+**Coverage:** added `pytest-cov` (`pyproject.toml` dev extra), a `make coverage` target (`pytest -m "not slow" --cov=src/hybrid --cov-report=term-missing`), and a CI step running the same. **92% overall statement coverage** on the fast suite at the time of measurement, with the modules spec specifically calls out as needing to be "well covered" (not 100% overall) at or near 100%: `fusion.py`, `confidence.py`, `evaluation.py`, `motion_wave.py`, `filters.py`, `optical_flow.py` all 100%, `estimators.py` 98%. The lowest-covered module, `models.py` at 47%, is expected and fine — most of its uncovered code is the network-download path, only exercised by the `slow`-marked real-model tests, not something worth mocking just to inflate a number.
+
+**Integration test (`tests/test_integration_pipeline.py`):** spec's choice (b) — a real trimmed development clip — implemented by reusing `video3_development.mp4` directly rather than committing a new fixture: by the time this test runs in a real dev environment, that video's every branch is already cached from this session's own development work, so it completes in ~26s (mostly cache hits) instead of the ~15-20 minutes a cold run would take, with no separate fixture-creation/validation pass needed. Marked `@pytest.mark.slow` and skips gracefully when `data/split/` isn't present (e.g. CI, which never has the raw videos) — the same pattern already established for Phase 2/3's real-model tests. Asserts the real, fully unmocked Phase 1-12 chain produces a finite, physiologically-plausible CPM (broad bounds, not an accuracy claim — this is a system smoke test, Phase 13 already owns the accuracy claim) without raising.
+
+**CI (`​.github/workflows/ci.yml`):** already ran lint + format-check + fast tests since Phase 3 (when the CPU-torch-index step was added); this phase added the coverage flag to the existing test step rather than a separate job, and nothing else needed changing — CI has stayed green through every phase's commit.
+
+**Tests:** the two additions above are net **+1 test file** (`test_integration_pipeline.py`, 1 slow test) on top of every module's own test file already built phase-by-phase. Total suite at this point: **213 fast + 4 slow = 217 tests**, all passing, ruff clean.
+
+**Next phase:** Phase 20 — Documentation.
