@@ -567,3 +567,37 @@ phase's commit and changed the fusion default (`disagreement_scale_cpm` 10.0 -> 
 changes the pipeline's actual output. `README.md`'s results table was updated a second time in
 a follow-up commit to keep the documentation-phase deliverable in sync with the config it's
 describing, rather than leaving Phase 20's docs describing a config the repo no longer ships.
+
+---
+
+## Phase 21 — Optional Stretch Polish (reviewed, scoped down)
+
+Spec frames this phase explicitly as lower-priority, "only if time remains after Phases 0-20" —
+reviewed each item on that basis rather than either building all of it unprompted or skipping
+the review entirely.
+
+**Already satisfied, no work needed:** "dataclasses/typed result objects instead of loose
+dicts" — this was never deferred; every branch since Phase 2 already returns a typed
+`@dataclass` result (`HandDetection`/`MediaPipeVideoResult`, `CoTrackerVideoResult`,
+`EgoMotionVideoResult`/`FrameEgoMotion`, `CorrectedTrackerResult`, `OpticalFlowVideoResult`,
+`MotionWaveResult`, `FilterResult`, `AllEstimatesResult`, `RepNetResult`, `BranchConfidences`,
+`FusionResult`, `VideoEvaluationResult`/`DevelopmentEvaluationResult`, `AblationSummary`), never
+a loose dict. Nothing to change.
+
+**Deliberately not built this session** (each is a genuinely new feature — new dependency, new
+untested surface, meaningful scope beyond "polish" — not something to add speculatively without
+being asked, per this project's own engineering discipline against unrequested scope):
+- A Streamlit/Gradio viewer over `runs/development/<video>/` artifacts.
+- A `typer`/`click` CLI (`hybrid run-dev`/`tune`/`ablate`) replacing the current
+  `python -m hybrid.run_development` argparse entrypoint.
+- Docker containers per environment — explicitly superseded by ADR 0003's virtualenv+subprocess
+  decision; building this now would contradict that ADR rather than extend it.
+- MLflow/W&B wiring on top of the experiment ledger.
+
+Any of these can be picked up in a future session on request — none are blockers, and none
+affect pipeline correctness, accuracy, or the CLAUDE.md/spec completion bar for Phases 0-20.
+
+**No code changed this phase; nothing to test or lint beyond what Phase 20 already verified.**
+
+**This is the last phase in `cpr_hybrid_pipeline_prompt_v2.md`'s numbered list (0-21).** Every
+phase from 0 through 21 now has a completed PROGRESS.md entry.
