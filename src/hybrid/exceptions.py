@@ -64,3 +64,9 @@ class EstimatorError(HybridError):
 
 class FusionError(HybridError):
     """No usable candidate estimate was available to fuse into a final CPM."""
+
+
+class HeldOutVideoError(HybridError):
+    """Attempted to process a *_test.mp4 file outside the (not yet written)
+    frozen-pipeline test-run script. Development/tuning code must only ever
+    touch *_development.mp4 files (CLAUDE.md rules 1-2, Phase 18)."""

@@ -414,3 +414,15 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 - `hybrid.run_development` (Phase 18) instead of a separate `hybrid.cli`/typer-based entrypoint — a plain `argparse` CLI was sufficient for what Phase 18 needs (the test-safety guard + running the dev-set pipeline); a fuller CLI framework is Phase 21's optional stretch item, not required here.
 
 **Next phase:** Phase 18 — Test-Safety Rule.
+
+---
+
+## Phase 18 — Test-Safety Rule (done)
+
+**`src/hybrid/run_development.py`:** the entrypoint spec asks for (`python -m hybrid.run_development [VIDEO ...]`) with an explicit guard, `guard_development_only()`, called before any caller-supplied path reaches the pipeline — raises the new `HeldOutVideoError` (originally drafted as `TestVideoGuardError`, renamed after pytest's own collection warned it looked like a test class by name; see Decisions) for anything not matching `*_development.mp4`. With no arguments it runs the full dev set (`discover_development_videos`); with explicit paths it maps each through the same guard + GT-lookup logic Phase 1 built, refusing (not silently skipping) a `_test.mp4` path before any pipeline stage — including MediaPipe/CoTracker/RepNet — ever sees it. No test-video equivalent script exists; Phase 18 explicitly forbids writing one now.
+
+**Tests (`tests/test_run_development.py`, 12 tests):** the guard accepts/rejects filename patterns (parametrized, including a `.mov` extension case that's accepted since the check is about the `_development`/`_test` stem suffix, not the extension, consistent with Phase 1's mapper), `_dev_video_for_path` happy path and its two failure modes (test video, missing GT row), and three `main()`-level tests verifying a `_test.mp4` argument is rejected **before** `run_full_pipeline_on_video` is ever called (asserted via a call-count spy, not just that an exception was raised), a clean full-dev-set run returns exit code 0, and one video's `HybridError` doesn't stop the others from being processed (exit code 1, but `processed == ["video1", "video2"]` — both ran). Full suite: **208/211 tests passing** at the time (3 slow deselected), ruff clean.
+
+**Decisions:** (1) Renamed the guard exception from `TestVideoGuardError` to `HeldOutVideoError` mid-implementation — pytest's collector treats any class matching `Test*` as a candidate test class, and a `HybridError` subclass with an inherited `__init__` triggered a `PytestCollectionWarning` on every test run referencing it. Not a functional bug, but noisy; renamed rather than suppressing the warning, since `HeldOutVideoError` is arguably the more accurate name anyway (rule 1-2 is about the *held-out test set*, not merely "test" in the software-testing sense). (2) A failed video logs and continues to the next one rather than aborting the whole run — partial results from a partial failure are still useful, and this matches the "fail gracefully" principle already established throughout Phases 2-12's per-branch error handling.
+
+**Next phase:** Phase 19 — Testing & CI.
