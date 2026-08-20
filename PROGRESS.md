@@ -442,3 +442,61 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 **Tests:** the two additions above are net **+1 test file** (`test_integration_pipeline.py`, 1 slow test) on top of every module's own test file already built phase-by-phase. Total suite at this point: **213 fast + 4 slow = 217 tests**, all passing, ruff clean.
 
 **Next phase:** Phase 20 — Documentation.
+
+---
+
+## Phase 20 — Documentation (done)
+
+**`README.md`:** rewritten with a problem statement, the spec's "Final Expected Pipeline" ASCII
+diagram embedded directly (per Phase 20's own instruction to include it, not just reference
+`docs/architecture.md`'s Mermaid rendering of the same pipeline), full setup/run instructions
+(`make setup`, `make run-dev [VIDEO=...]` — both newly added Makefile targets, see Decisions),
+project structure, and the real Phase 13 development-set results table (MAE = 1.976 CPM, 95%
+CI [1.159, 2.664], RMSE = 2.199, mean signed error = -0.112, all 6 videos within ~1-4% relative
+error) plus a pointer to the Phase 13/14 ablation + Wilcoxon results already in this file.
+
+**`docs/adr/000{1-4}-*.md`:** one ADR per decision Phase 20 lists — `estimateAffinePartial2D`
+vs `estimateAffine2D` (0001), the shared 1.0-3.0Hz band covering both Butterworth filtering
+*and* the four estimators' own search bands since both were the same design decision made once
+in Phase 8 and reused in Phase 9 rather than two independent ones (0002 — a deliberate one-ADR
+consolidation of the spec's two listed items, not an omission), virtualenv+subprocess vs Docker
+for RepNet, and why CoTracker needed no isolation at all (0003), and the confidence x agreement
+double-weighted fusion formula vs. the spec's plain weighted-average starting point (0004).
+
+**`docs/architecture.md`:** the Mermaid rendering of the same pipeline (spec's explicit
+instruction: "Render this as Mermaid in `docs/architecture.md`"), plus a module map table
+(pipeline stage -> `src/hybrid` module -> result type) and a short note on what's deliberately
+left off the diagram (per-branch confidence, documented instead in `hybrid.confidence`'s
+docstring and ADR 0004).
+
+**`docs/method_card.md`:** intended use (development/research, explicitly not clinical/safety-
+critical, explicitly not validated on the held-out test set), five known limitations (VFR video,
+single-hand assumption, smart-glasses-specific ego-motion model, small 6-video development set,
+RepNet's zero-shot domain mismatch, per-frame-pair ego-motion with no loop closure), and four
+observed failure modes pulled from real diagnostics (Phases 4/6/9/10/12) rather than
+hypothetical ones: per-video ego-motion reliability variation, the Phase 6 optical-flow dilution
+bug, RepNet's consistent domain-mismatch pattern, and CWT's structurally-low confidence even
+when accurate.
+
+**Decisions:** (1) Added `make setup` (alias of `make install`) and `make run-dev [VIDEO=...]`
+Makefile targets — the pipeline already ran fine via `python -m hybrid.run_development`
+directly, but Phase 20's own README bullet names `make setup`/`make run-dev VIDEO=...`
+specifically, so the targets were added to match the spec literally rather than documenting
+different-but-equivalent commands. (2) Found and fixed an unrelated lint-config gap while
+verifying `ruff format --check .` before this commit: the installed ruff (0.16.3, unpinned in
+`pyproject.toml`'s dev extra) now formats Python code fences embedded in Markdown, and was
+trying to reformat `cpr_hybrid_pipeline_prompt_v2.md` — the externally-authored spec document
+itself, not our code. Added `extend-exclude = ["cpr_hybrid_pipeline_prompt_v2*.md"]` to
+`[tool.ruff]` rather than letting the formatter rewrite the user's source spec or leaving CI's
+unpinned `ruff format --check .` step exposed to failing on it. (3) No diagnostic plots
+generated for the method card (same scope decision as Phase 16) — every claim in "Observed
+failure modes" cites the specific real numbers already in this file's own Phase 4/6/9/10/12
+entries rather than a screenshot.
+
+**Verification:** `ruff check .` and `ruff format --check .` both clean, fast suite still
+**213 passed, 4 deselected** (no `src/hybrid` code changed this phase, so no regression
+expected or found).
+
+**Next phase:** Phase 21 — Optional Stretch Polish (lower priority; time-permitting only, per
+spec). Phase 15's targeted parameter sweep (approved by the user, in progress) still owes a
+follow-up entry with before/after dev MAE/RMSE once it completes.

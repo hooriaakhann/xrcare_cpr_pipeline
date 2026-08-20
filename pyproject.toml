@@ -39,6 +39,9 @@ markers = [
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+# Externally-authored spec doc, not our code -- newer ruff formats embedded
+# markdown code fences, which would rewrite the user's source spec.
+extend-exclude = ["cpr_hybrid_pipeline_prompt_v2*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
