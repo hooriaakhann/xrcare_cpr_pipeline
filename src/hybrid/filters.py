@@ -26,7 +26,6 @@ from scipy.signal import butter, filtfilt
 from hybrid.config import FilteringConfig, HybridConfig
 from hybrid.exceptions import FilteringError
 from hybrid.logging_config import get_logger
-from hybrid.motion_wave import MotionWaveResult
 
 logger = get_logger(__name__)
 
@@ -86,10 +85,15 @@ def _design_butterworth(
     return b, a
 
 
-def apply_butterworth_filter(motion_wave_result: MotionWaveResult, config: HybridConfig, video_id: str) -> FilterResult:
+def apply_butterworth_filter(
+    timestamps: np.ndarray, values: np.ndarray, config: HybridConfig, video_id: str
+) -> FilterResult:
+    """Filters any (timestamps_sec, signal) pair -- Phase 7's `motion_wave`
+    in the main pipeline, but also any single-branch signal Phase 14's
+    ablations want filtered on its own (e.g. raw CoTracker motion, raw
+    optical flow) without needing a full `MotionWaveResult` wrapper.
+    """
     f_config: FilteringConfig = config.filtering
-    timestamps = motion_wave_result.timestamps_sec
-    values = motion_wave_result.motion_wave
 
     sample_rate_hz = _nominal_sample_rate(timestamps)
     uniform_t, uniform_v = _resample_to_uniform_grid(timestamps, values, sample_rate_hz)

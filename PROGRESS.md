@@ -307,3 +307,34 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 **Decisions:** (1) Confidence-weighted median (not mean) as the disagreement-detection anchor — medians are inherently robust to a single outlier, which is exactly the property needed to detect "is RepNet the odd one out" without RepNet's own presence in a mean calculation biasing the very center it's being measured against. (2) `overall_confidence` deliberately penalizes a missing/excluded candidate (denominator is always 5, not the count of usable candidates) — fewer independent sources of evidence should read as somewhat less overall confidence even if the ones present fully agree. (3) Double-discounting (confidence x agreement) rather than picking one or the other — confidence alone wouldn't have caught RepNet in the worked example if its self-reported confidence weren't already low; agreement alone would unfairly penalize a genuinely-confident estimator that happens to disagree for a legitimate reason.
 
 **Next phase:** Phase 13 — Development-Set Evaluation.
+
+---
+
+## Phase 13 — Development-Set Evaluation (done)
+
+**`src/hybrid/evaluation.py`:** `run_full_pipeline_on_video()` runs Phase 2-12 end to end for one video (every branch through its `_cached` wrapper, so a re-run is cheap) and returns a `VideoEvaluationResult` (all 5 candidate CPMs, final hybrid CPM, overall confidence, signed/absolute error vs. GT, runtime). `run_development_evaluation()` runs that over every video from `discover_development_videos()`, computes MAE/RMSE/mean-signed-error/median-AE/max-AE, a **percentile bootstrap 95% CI on MAE** (2000 resamples, seeded) — per spec's explicit caution that a 6-video point estimate alone isn't very informative — and appends one record to the experiment ledger (`hybrid.experiment_ledger.log_run`, phase="development_evaluation") with every metric plus the config hash/git commit/seed, satisfying CLAUDE.md's "every development run... appended to the experiment ledger" rule.
+
+**Refactor alongside this phase:** `apply_butterworth_filter` (Phase 8) changed signature from taking a whole `MotionWaveResult` to taking `(timestamps, signal, config, video_id)` directly — it only ever used two of that object's ten fields, and Phase 14's ablations need to filter arbitrary single-branch signals (not just Phase 7's fused wave) without constructing a dummy wrapper object for each. `tests/test_filters.py`'s four call sites updated accordingly (dropped the now-unnecessary `_motion_wave_result` test helper); re-verified green before writing any Phase 13 code.
+
+**GT is never an input** (CLAUDE.md rule 5) — `dev_video.gt.gt_cpm` is read only *after* `fuse_estimates()` has already produced `final_cpm`, purely to compute the error metric.
+
+**Tests (`tests/test_evaluation.py`, 6 tests):** `_bootstrap_mae_ci` on constant errors (tight CI at the true value), on varied errors (CI brackets the true mean), determinism given a fixed seed; `run_full_pipeline_on_video` assembly correctness (signed/absolute error sign, RepNet-`None` passthrough) via monkeypatched stages; `run_development_evaluation` aggregation against hand-computed MAE/RMSE/mean-signed-error/median/max, and that it calls `log_run` with the right payload. Full suite: **187/190 tests passing** at the time (3 slow deselected), ruff clean.
+
+**Real-data results — the full development set, all 6 videos, run to completion in the background (~55 min wall-clock; 4 of 6 videos were cold, 2 were already fully cached from earlier phases' sanity checks):**
+
+| video | GT CPM | final CPM | signed error | overall confidence | runtime |
+|---|---:|---:|---:|---:|---:|
+| video1 | 90.00 | 92.71 | +2.71 | 0.553 | 0.4s (cached) |
+| video2 | 69.23 | 68.01 | -1.22 | 0.467 | 1217.8s |
+| video3 | 105.88 | 103.71 | -2.17 | 0.574 | 0.0s (cached) |
+| video4 | 72.00 | 69.33 | -2.67 | 0.500 | 1039.8s |
+| video9 | 94.74 | 97.62 | +2.88 | 0.448 | 806.2s |
+| video10 | 100.00 | 99.79 | -0.21 | 0.669 | 824.4s |
+
+**Aggregate: MAE = 1.976 CPM (95% CI [1.159, 2.664]), RMSE = 2.199, mean signed error = -0.112 (essentially unbiased — no systematic over/under-estimation across the dev set), median absolute error = 2.420, max absolute error = 2.884.** Every video landed within ~1-4% relative error of its GT. This is a development-set result, tuned/validated only on these 6 videos, per CLAUDE.md's own framing — not a generalization claim about the held-out test set.
+
+**A real, correctly-handled edge case observed during this run (not a bug):** `video4_development.mp4` logged 20 "unstable optical flow" warnings across its first ~0.7s (frames 1-20, `magnitude=0.0px`) — because MediaPipe hadn't yet detected a hand that early in the clip, `_compute_frame_flow`'s foreground mask was legitimately empty (no ROI to measure), and the code correctly reported "invalid" rather than fabricating a foreground reading. `video4` also logged 7 ego-motion warnings (inlier ratio as low as 0.22 at t=0.62-0.87s) and `video2` logged 1 — none individually exceeded either branch's aggregate span threshold, so nothing raised, and `video4`'s final accuracy (2.67 CPM error) was unremarkable compared to the rest of the set despite the roughest early-frame diagnostics — real evidence the graceful-degradation design (log + confidence-discount, don't hard-fail on transient per-frame trouble) works as intended on real, not just synthetic, edge cases.
+
+**Runtime observation:** cold per-video runtime is ~800-1220s (13-20 min), dominated by CoTracker and optical flow as expected from Phases 3/6's individual findings; cached re-runs are near-instant. A full cold 6-video pass is therefore roughly an hour of wall-clock compute on this CPU-only machine.
+
+**Next phase:** Phase 14 — Ablation Comparison.
