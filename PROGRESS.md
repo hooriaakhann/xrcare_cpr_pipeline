@@ -269,3 +269,21 @@ RepNet's 92.66 CPM vs. this video's GT of 105.88 CPM (~13 CPM / 12.5% error) is 
 **Decisions:** (1) Vendor-from-notebook over reimplementing from the paper -- "prefer official pretrained implementations" (CLAUDE.md rule 15) and reimplementing from scratch would have meant guessing at architecture details the checkpoint's weights are keyed to exactly. (2) Subprocess + isolated venv over attempting to merge TF into the main venv (unlike CoTracker/torch in Phase 3) -- the Phase 0.5 default, and not worth the risk of finding out mid-pipeline that mediapipe's TFLite runtime and full TensorFlow collide. (3) `batch_size=4` default (vs. the notebook's GPU-tuned 20) for this CPU-only machine -- Phase 15 can retune if needed. (4) Variant B (stabilized input) deferred, not attempted -- explicit scope decision, not a gap discovered later.
 
 **Next phase:** Phase 11 — Confidence Calculation.
+
+---
+
+## Phase 11 — Confidence Calculation (done)
+
+**Scope note:** every branch built in Phases 2-10 already computes and normalizes its own confidence inline where it's derived — Phase 11 doesn't recompute anything; it's a consolidation + validation + documentation pass, per spec's actual ask ("normalize confidence values to a consistent range... document how each confidence score is calculated").
+
+**`src/hybrid/confidence.py`:** `collect_confidences()` gathers all nine branch confidences (MediaPipe detection rate, mean CoTracker visibility, mean ego-motion inlier confidence, optical-flow valid-frame fraction, and the four classical estimators' + RepNet's own confidence) into one `BranchConfidences` dataclass, and validates every value is genuinely within `[0.0, 1.0]` — raising the new `ConfidenceRangeError` if a branch's own normalization ever produces something out of range, catching a bug at the boundary before it can silently skew Phase 12's fusion weights. The module docstring is the consolidated documentation spec asks for, one line per branch, pointing back to the phase/module that actually computes it (the authoritative documentation stays there, not duplicated).
+
+**Design note:** MediaPipe/CoTracker/ego-motion/optical-flow confidences don't feed Phase 12's CPM fusion directly — they already did their weighting work upstream, in Phase 7's `tracker_weight`/`flow_weight`. They're still collected here so the complete per-video confidence picture exists in one place for Phase 16's diagnostics and Phase 13's evaluation tables, rather than scattered across five different result objects a caller would otherwise have to reach into individually.
+
+**Tests (`tests/test_confidence.py`, 4 tests):** happy-path collection against synthetic results for all nine branches (verifying each aggregate — e.g. CoTracker's mean visibility, ego-motion's mean confidence — matches hand-computed expectations), `as_dict()` shape, and two range-validation tests (a value above 1.0, a value below 0.0) confirming `ConfidenceRangeError` fires correctly. Full suite: **173/177 tests passing** (3 slow deselected), ruff clean.
+
+**Real-data check** (full Phase 2->11 chain, `video3_development.mp4`, all values read directly from cache — no recomputation): mediapipe=1.000, cotracker=0.998, ego_motion=0.970, optical_flow=1.000, cwt=0.057, autocorrelation=0.875, fft=0.977, peaks=0.926, repnet=0.662 — every value lands in `[0,1]` as expected, and each matches the individual phase's own real-data numbers exactly (no discrepancy introduced by the collection step). The CWT/RepNet outliers noted in Phases 9-10 are visibly preserved here, exactly the picture Phase 12 needs to weight them down rather than something this phase should paper over.
+
+**Decisions:** (1) A thin collection/validation module, not a recomputation layer — avoids duplicating logic that already lives correctly in each branch. (2) Hard validation (`ConfidenceRangeError`) rather than silently clamping out-of-range values — a branch producing >1.0 or <0.0 confidence is a bug in that branch, not something to paper over here.
+
+**Next phase:** Phase 12 — Final Hybrid Fusion.
