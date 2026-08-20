@@ -44,11 +44,21 @@ outperforms any single component. It is explicitly **not**:
   accurately than the four classical estimators on real dev videos; this is expected for an
   out-of-domain zero-shot application, not a bug in the branch itself (see PROGRESS.md Phase
   10).
-- **Ego-motion/optical-flow branches are per-frame-pair, not globally consistent.** Phase 4's
-  RANSAC fit is independent for every consecutive frame pair (no persistent long-lived track,
-  no bundle adjustment); Phase 5's cumulative composition of those independent estimates has no
-  loop closure. Fine for this dataset's short clips (~17-30s); flagged in PROGRESS.md Phase 5
-  as a real limitation if this pipeline is ever pointed at much longer footage.
+- **The ego-motion branch (Phase 4/5) is not globally consistent and can drift.** Phase 4's
+  RANSAC affine fit is independent for every consecutive frame pair (no persistent long-lived
+  track, no bundle adjustment); Phase 5's cumulative composition of those independent estimates
+  into an absolute per-frame correction has no loop closure, so small per-frame errors can
+  compound over a clip. Fine for this dataset's short clips (~17-30s); flagged in PROGRESS.md
+  Phase 5 as a real limitation if this pipeline is ever pointed at much longer footage.
+  **The optical-flow branch (Phase 6) does not share this risk, and not by luck:** it cancels
+  camera motion with its own independent, per-frame mechanism (median background-region flow
+  subtracted from median foreground-region flow, both from the same Farneback field) rather
+  than reusing Phase 4's RANSAC transform at all. Because that subtraction is a frame-to-frame
+  differential recomputed from scratch every frame -- not an absolute position built by
+  composing prior frames the way Phase 5's correction is -- there is no state for a bad
+  estimate to corrupt going forward. Confirmed on video2 (Phase 14/15 investigation): its
+  isolated ego-motion-corrected-tracker signal is 45.5 CPM off GT (114.7 vs 69.2, a RANSAC-drift
+  failure), while its optical-flow branch and the fused hybrid output both stay accurate.
 
 ## Observed failure modes (development diagnostics)
 
@@ -78,3 +88,15 @@ coverage, just what was actually observed and is worth watching for:
   PROGRESS.md) — a property of Morlet wavelets' broader spectral peaks vs. FFT's discrete bins,
   not a sign of poor estimation. Worth remembering when reading a per-video confidence table:
   low CWT confidence alone doesn't mean the CWT estimate was wrong.
+- **Catastrophic ego-motion drift (video2) is a real but isolated failure mode, not typical.**
+  Re-checked the isolated `C_cotracker_affine` ablation arm across all 6 dev videos under the
+  frozen config: video2 is a clear outlier at 45.5 CPM absolute error (65.7% relative) — nearly
+  5x worse than the next-worst video. video9 (9.6 CPM, 10.1%) and video10 (8.2 CPM, 8.2%) show
+  moderate divergence; video1 (4.2 CPM), video3 (0.8 CPM), and video4 (1.7 CPM) are clean. The
+  full fused hybrid output stays close to GT across all six regardless (0.19-3.30 CPM absolute
+  error) — including video2 — confirming Phase 7/12's confidence-weighted fusion is generally
+  containing single-branch ego-motion weakness across the dev set, not just recovering one known
+  bad case. This isolated-branch fragility is unresolved at the algorithm level (no loop closure
+  / re-anchoring implemented, see the limitation above) and shipped as-is into the frozen config
+  for test evaluation — the fusion architecture is the mitigation, not a fix to the branch
+  itself.
