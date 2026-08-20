@@ -406,6 +406,25 @@ class RepNetConfig(StrictModel):
         return v
 
 
+class FusionConfig(StrictModel):
+    """Final hybrid fusion (Phase 12). Beyond plain confidence weighting,
+    each candidate estimate is also down-weighted the further it sits from
+    the group's confidence-weighted-median center -- "basic disagreement
+    handling" per spec, so one low-confidence outlier can't pull the final
+    value strongly toward it even if its own confidence isn't dramatically
+    low.
+    """
+
+    disagreement_scale_cpm: float = 10.0
+
+    @field_validator("disagreement_scale_cpm")
+    @classmethod
+    def _positive(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"disagreement_scale_cpm must be > 0.0, got {v}")
+        return v
+
+
 class HybridConfig(StrictModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -419,6 +438,7 @@ class HybridConfig(StrictModel):
     filtering: FilteringConfig = Field(default_factory=FilteringConfig)
     estimators: EstimatorsConfig = Field(default_factory=EstimatorsConfig)
     repnet: RepNetConfig = Field(default_factory=RepNetConfig)
+    fusion: FusionConfig = Field(default_factory=FusionConfig)
 
     def config_hash(self) -> str:
         """Short hash of the fully-resolved config, for cache keys and the experiment ledger."""

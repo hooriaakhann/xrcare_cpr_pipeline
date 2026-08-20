@@ -60,3 +60,7 @@ class FilteringError(HybridError):
 class EstimatorError(HybridError):
     """A classical rate estimator (CWT, autocorrelation, FFT, peaks) could
     not produce a result (no in-band energy, fewer than 2 peaks, ...)."""
+
+
+class FusionError(HybridError):
+    """No usable candidate estimate was available to fuse into a final CPM."""
