@@ -1,0 +1,47 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Video data (large binaries; raw/processed/split are regenerated or
+# sourced outside git — see README for how to obtain them) ---
+data/raw/
+data/processed/
+data/split/
+data/cache/
+
+# Metadata (CSVs, timestamp sidecars, ground truth) IS tracked — small,
+# reproducibility-relevant, and not regenerable without the raw videos.
+!data/metadata/
+!data/metadata/**
+
+# --- Runs / experiment outputs (local tuning history, not versioned;
+# see runs/experiment_ledger.jsonl for the append-only run log) ---
+runs/*
+!runs/.gitkeep
+
+# --- Testing / tooling caches ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Isolated ML environments (ADR 0003, not yet written) ---
+.venv-torch/
+.venv-tf/

@@ -1,0 +1,11 @@
+filename,cpr_start_sec,cpr_end_sec,cpr_duration_sec,known_compression_count,gt_cpm,notes
+video1.mp4,4.0,24.0,20.0,30,90.0,
+video2.mp4,3.0,29.0,26.0,30,69.2308,
+video3.mp4,2.0,19.0,17.0,30,105.8824,
+video4.mp4,5.0,30.0,25.0,30,72.0,
+video5.mp4,5.0,25.0,20.0,30,90.0,
+video6.mp4,3.0,24.0,21.0,30,85.7143,
+video7.mp4,4.0,24.0,20.0,30,90.0,
+video8.mp4,3.0,22.0,19.0,30,94.7368,
+video9.mp4,2.0,21.0,19.0,30,94.7368,
+video10.mp4,2.0,20.0,18.0,30,100.0,

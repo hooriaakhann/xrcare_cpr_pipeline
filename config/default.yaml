@@ -1,0 +1,30 @@
+# Default pipeline config. Every field here maps to a Pydantic model in
+# src/hybrid/config.py — an unknown key or wrong type fails validation at
+# load time rather than silently being ignored.
+#
+# Paths are relative to the project root; load_config() resolves them to
+# absolute paths.
+
+project:
+  seed: 42
+
+paths:
+  data_root: data
+  raw_dir: data/raw
+  processed_dir: data/processed
+  split_dir: data/split
+  metadata_dir: data/metadata
+  ground_truth_csv: data/metadata/ground_truth_summary.csv
+  cache_dir: data/cache
+  runs_dir: runs
+
+video:
+  development_glob: "data/split/*_development.mp4"
+  test_glob: "data/split/*_test.mp4"
+
+logging:
+  level: INFO
+  log_dir: runs/logs
+
+caching:
+  enabled: true
