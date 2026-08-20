@@ -4,11 +4,13 @@ YAML dict directly. Later phases (branches, fusion, tuning) extend
 `HybridConfig` with their own sub-models rather than adding ad-hoc args.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from hybrid.exceptions import ConfigError
 
@@ -37,7 +39,7 @@ class PathsConfig(StrictModel):
     runs_dir: Path = Path("runs")
     models_dir: Path = Path("models")
 
-    def resolve(self, root: Path) -> "PathsConfig":
+    def resolve(self, root: Path) -> PathsConfig:
         return PathsConfig(**{field: root / value for field, value in self})
 
 
@@ -166,6 +168,67 @@ class CoTrackerConfig(StrictModel):
         return v
 
 
+class EgoMotionConfig(StrictModel):
+    """RANSAC affine (similarity) ego-motion compensation (Phase 4). RNG/RANSAC
+    reproducibility uses `project.seed` (CLAUDE.md: "RNG/RANSAC seed recorded
+    with every run") rather than a separate seed field here.
+    """
+
+    max_features: int = 200  # goodFeaturesToTrack maxCorners
+    quality_level: float = 0.01
+    min_distance: float = 8.0
+    roi_exclusion_dilate_px: int = 20  # extra margin excluded around the CPR ROI
+    ransac_reproj_threshold: float = 3.0
+    min_inlier_ratio: float = 0.5
+    max_rotation_deg: float = 15.0  # sanity bound: head motion is not full spins
+    min_scale: float = 0.8
+    max_scale: float = 1.25
+    # Longest allowed contiguous run of an unreliable transform before
+    # raising EgoMotionUnreliableError.
+    max_unreliable_span_sec: float = 2.0
+
+    @field_validator("max_features", "roi_exclusion_dilate_px")
+    @classmethod
+    def _non_negative_int(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"must be >= 0, got {v}")
+        return v
+
+    @field_validator("quality_level")
+    @classmethod
+    def _quality_level_range(cls, v: float) -> float:
+        if not 0.0 < v <= 1.0:
+            raise ValueError(f"quality_level must be in (0.0, 1.0], got {v}")
+        return v
+
+    @field_validator("min_distance", "ransac_reproj_threshold", "max_rotation_deg", "max_unreliable_span_sec")
+    @classmethod
+    def _non_negative_float(cls, v: float) -> float:
+        if v < 0.0:
+            raise ValueError(f"must be >= 0.0, got {v}")
+        return v
+
+    @field_validator("min_inlier_ratio")
+    @classmethod
+    def _in_unit_interval(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"must be in [0.0, 1.0], got {v}")
+        return v
+
+    @field_validator("min_scale", "max_scale")
+    @classmethod
+    def _positive_scale(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"must be > 0.0, got {v}")
+        return v
+
+    @model_validator(mode="after")
+    def _scale_bounds_ordered(self) -> EgoMotionConfig:
+        if self.min_scale > self.max_scale:
+            raise ValueError(f"min_scale ({self.min_scale}) must be <= max_scale ({self.max_scale})")
+        return self
+
+
 class HybridConfig(StrictModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -174,6 +237,7 @@ class HybridConfig(StrictModel):
     caching: CachingConfig = Field(default_factory=CachingConfig)
     mediapipe: MediaPipeConfig = Field(default_factory=MediaPipeConfig)
     cotracker: CoTrackerConfig = Field(default_factory=CoTrackerConfig)
+    ego_motion: EgoMotionConfig = Field(default_factory=EgoMotionConfig)
 
     def config_hash(self) -> str:
         """Short hash of the fully-resolved config, for cache keys and the experiment ledger."""

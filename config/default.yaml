@@ -47,3 +47,15 @@ cotracker:
   max_track_loss_sec: 2.0
   window_frames: 100
   working_max_dim: 1024
+
+ego_motion:
+  max_features: 200
+  quality_level: 0.01
+  min_distance: 8.0
+  roi_exclusion_dilate_px: 20
+  ransac_reproj_threshold: 3.0
+  min_inlier_ratio: 0.5
+  max_rotation_deg: 15.0
+  min_scale: 0.8
+  max_scale: 1.25
+  max_unreliable_span_sec: 2.0

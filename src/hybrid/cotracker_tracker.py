@@ -34,6 +34,7 @@ from hybrid.exceptions import TrackLostError
 from hybrid.logging_config import get_logger
 from hybrid.mediapipe_roi import MediaPipeVideoResult, get_cotracker_init_points
 from hybrid.models import HAND_LANDMARKER
+from hybrid.signal_utils import longest_bad_run
 from hybrid.video_io import VideoReader
 
 logger = get_logger(__name__)
@@ -122,34 +123,10 @@ def _run_window(
 def _longest_run_below_threshold(
     valid_ratio: np.ndarray, timestamps: np.ndarray, threshold: float
 ) -> tuple[int, float, list[tuple[int, int]]]:
-    """Same longest-contiguous-run pattern as Phase 2's `_longest_gap`,
-    generalized to a ratio-below-threshold condition. Returns
-    (longest_run_frames, longest_run_sec, all_periods_as_(start_idx,end_idx)).
+    """Longest contiguous run where `valid_ratio < threshold`. Thin wrapper
+    around the shared `longest_bad_run` helper (also used by Phase 4).
     """
-    below = valid_ratio < threshold
-    periods: list[tuple[int, int]] = []
-    longest_frames = 0
-    longest_sec = 0.0
-    run_start: int | None = None
-    for i, is_below in enumerate(below):
-        if is_below:
-            if run_start is None:
-                run_start = i
-            continue
-        if run_start is not None:
-            periods.append((run_start, i - 1))
-            run_len = i - run_start
-            run_sec = float(timestamps[i - 1] - timestamps[run_start])
-            if run_len > longest_frames:
-                longest_frames, longest_sec = run_len, run_sec
-            run_start = None
-    if run_start is not None:
-        periods.append((run_start, len(below) - 1))
-        run_len = len(below) - run_start
-        run_sec = float(timestamps[-1] - timestamps[run_start])
-        if run_len > longest_frames:
-            longest_frames, longest_sec = run_len, run_sec
-    return longest_frames, longest_sec, periods
+    return longest_bad_run(valid_ratio < threshold, timestamps)
 
 
 def _median_visible_y(tracks_y: np.ndarray, visibility: np.ndarray) -> np.ndarray:
