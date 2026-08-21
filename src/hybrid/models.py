@@ -41,6 +41,18 @@ HAND_LANDMARKER = PinnedModel(
     sha256="fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",
 )
 
+# "Lite" variant deliberately chosen over full/heavy -- this is a visualization-only
+# branch (overlay_video.py), not part of CPM estimation, and this project is CPU-only
+# throughout (see CLAUDE.md environment constraints).
+POSE_LANDMARKER = PinnedModel(
+    filename="pose_landmarker_lite.task",
+    url=(
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
+        "pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
+    ),
+    sha256="59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+)
+
 # RepNet checkpoint (google-research/google-research repnet_colab.ipynb) --
 # three files that must live together in one directory for
 # tf.train.CheckpointManager to find them.

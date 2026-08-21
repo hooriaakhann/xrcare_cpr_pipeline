@@ -107,6 +107,25 @@ class MediaPipeConfig(StrictModel):
         return v
 
 
+class MediaPipePoseConfig(StrictModel):
+    """Body-pose landmark branch (visualization-only, `overlay_video.py`) --
+    a second, separate MediaPipe model from `MediaPipeConfig`'s hand
+    localizer. Not used by CPM estimation or any other branch; exists only
+    so the diagnostic overlay video can also show shoulders/elbows/hips.
+    """
+
+    min_pose_detection_confidence: float = 0.5
+    min_pose_presence_confidence: float = 0.5
+    min_tracking_confidence: float = 0.5
+
+    @field_validator("min_pose_detection_confidence", "min_pose_presence_confidence", "min_tracking_confidence")
+    @classmethod
+    def _in_unit_interval(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"must be in [0.0, 1.0], got {v}")
+        return v
+
+
 class CoTrackerConfig(StrictModel):
     """Multi-point tracking branch (Phase 3). The pretrained CoTracker3
     "offline" model holds its whole input video tensor in memory at once, so
@@ -455,6 +474,7 @@ class HybridConfig(StrictModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     caching: CachingConfig = Field(default_factory=CachingConfig)
     mediapipe: MediaPipeConfig = Field(default_factory=MediaPipeConfig)
+    mediapipe_pose: MediaPipePoseConfig = Field(default_factory=MediaPipePoseConfig)
     cotracker: CoTrackerConfig = Field(default_factory=CoTrackerConfig)
     ego_motion: EgoMotionConfig = Field(default_factory=EgoMotionConfig)
     optical_flow: OpticalFlowConfig = Field(default_factory=OpticalFlowConfig)

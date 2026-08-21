@@ -3,17 +3,22 @@ inference/estimation).
 
 For each development video, renders one MP4 to
 `runs/development/<video_id>/overlay.mp4` combining, on the original
-frames: MediaPipe's dynamic CPR ROI box (Phase 2) and landmarks, and
-CoTracker's raw tracked points colored by visibility (Phase 3) -- plus a
-scrolling strip beneath the frame showing the raw vs. ego-motion-corrected
-tracker motion signal (Phase 5) with a moving playhead. A single
-sanity-check/demo artifact per video, not a new inference output.
+frames: MediaPipe's dynamic CPR ROI box (Phase 2) and connected hand
+skeleton, MediaPipe Pose's connected body skeleton (`mediapipe_pose.py`,
+a second, separate model), and CoTracker's raw tracked points colored by
+visibility (Phase 3) -- plus a scrolling strip beneath the frame showing
+the raw vs. ego-motion-corrected tracker motion signal (Phase 5) with a
+moving playhead. A single sanity-check/demo artifact per video, not a new
+inference output; the pose skeleton in particular feeds nothing
+downstream -- see mediapipe_pose.py's own docstring.
 
 Reuses cached branch results the same way Phase 16's diagnostics.py does;
 nothing expensive re-runs if a video's branches are already cached. Unlike
 diagnostics.py, this module does decode and re-encode the actual video
 frames (needed to draw on them), so it's slower than writing CSV/JSON, but
-still just decode+draw+encode -- no model inference of its own.
+still just decode+draw+encode -- no CPM-relevant model inference of its
+own (Pose Landmarker inference happens once, cached, in
+mediapipe_pose.py, same discipline as every other branch).
 """
 
 from __future__ import annotations
@@ -31,7 +36,8 @@ from hybrid.dataset import DevVideo
 from hybrid.ego_motion import run_ego_motion_on_video_cached
 from hybrid.exceptions import VideoWriteError
 from hybrid.logging_config import get_logger
-from hybrid.mediapipe_roi import HandDetection, run_mediapipe_on_video_cached
+from hybrid.mediapipe_pose import POSE_CONNECTIONS, PoseDetection, run_mediapipe_pose_on_video_cached
+from hybrid.mediapipe_roi import HAND_CONNECTIONS, HandDetection, run_mediapipe_on_video_cached
 from hybrid.video_io import VideoReader
 
 logger = get_logger(__name__)
@@ -39,7 +45,10 @@ logger = get_logger(__name__)
 # Fixed rendering colors (BGR) -- cosmetic only, not config fields; see
 # OverlayVideoConfig's docstring for why.
 _ROI_COLOR = (0, 220, 0)
-_LANDMARK_COLOR = (255, 0, 255)
+_HAND_LANDMARK_COLOR = (255, 0, 255)
+_HAND_BONE_COLOR = (255, 140, 255)
+_POSE_LANDMARK_COLOR = (0, 165, 255)
+_POSE_BONE_COLOR = (0, 215, 255)
 _VISIBLE_POINT_COLOR = (0, 220, 0)
 _OCCLUDED_POINT_COLOR = (0, 0, 220)
 _RAW_CURVE_COLOR = (140, 140, 140)
@@ -49,10 +58,28 @@ _STRIP_BG_COLOR = (30, 30, 30)
 _STRIP_MARGIN_PX = 10
 
 
+def _draw_skeleton(
+    image: np.ndarray,
+    points: tuple[tuple[float, float], ...],
+    connections: tuple[tuple[int, int], ...],
+    joint_color: tuple[int, int, int],
+    bone_color: tuple[int, int, int],
+    point_radius_px: int,
+) -> None:
+    """In-place: connected skeleton -- bone lines first, then joint dots on
+    top, so joints stay visible where multiple bones meet."""
+    pixel_points = [(int(round(x)), int(round(y))) for x, y in points]
+    for i, j in connections:
+        if i < len(pixel_points) and j < len(pixel_points):
+            cv2.line(image, pixel_points[i], pixel_points[j], bone_color, max(1, point_radius_px // 2))
+    for x, y in pixel_points:
+        cv2.circle(image, (x, y), point_radius_px, joint_color, -1)
+
+
 def _draw_mediapipe_overlay(
     image: np.ndarray, detection: HandDetection, point_radius_px: int, box_thickness_px: int
 ) -> None:
-    """In-place: ROI box + landmark dots for one frame, if a hand was detected."""
+    """In-place: ROI box + connected hand skeleton for one frame, if a hand was detected."""
     if not detection.detected:
         return
     if detection.roi is not None:
@@ -65,8 +92,19 @@ def _draw_mediapipe_overlay(
         )
     if detection.landmarks_xy is not None:
         landmark_radius = max(1, point_radius_px // 2)
-        for x, y in detection.landmarks_xy:
-            cv2.circle(image, (int(round(x)), int(round(y))), landmark_radius, _LANDMARK_COLOR, -1)
+        _draw_skeleton(
+            image, detection.landmarks_xy, HAND_CONNECTIONS, _HAND_LANDMARK_COLOR, _HAND_BONE_COLOR, landmark_radius
+        )
+
+
+def _draw_pose_overlay(image: np.ndarray, detection: PoseDetection, point_radius_px: int) -> None:
+    """In-place: connected body-pose skeleton for one frame, if a pose was detected."""
+    if not detection.detected or detection.landmarks_xy is None:
+        return
+    landmark_radius = max(1, point_radius_px // 2)
+    _draw_skeleton(
+        image, detection.landmarks_xy, POSE_CONNECTIONS, _POSE_LANDMARK_COLOR, _POSE_BONE_COLOR, landmark_radius
+    )
 
 
 def _draw_cotracker_overlay(
@@ -149,6 +187,7 @@ def save_overlay_video_for_video(dev_video: DevVideo, config: HybridConfig, cach
     output_path = run_dir / "overlay.mp4"
 
     mp_result = run_mediapipe_on_video_cached(dev_video.split_path, config, video_id, cache_manager)
+    pose_result = run_mediapipe_pose_on_video_cached(dev_video.split_path, config, video_id, cache_manager)
     ct_result = run_cotracker_on_video_cached(dev_video.split_path, mp_result, config, video_id, cache_manager)
     ego_result = run_ego_motion_on_video_cached(dev_video.split_path, mp_result, config, video_id, cache_manager)
     corrected = correct_tracker_trajectory(ct_result, ego_result, video_id)
@@ -187,6 +226,9 @@ def save_overlay_video_for_video(dev_video: DevVideo, config: HybridConfig, cach
                         ov_config.point_radius_px,
                         ov_config.roi_box_thickness_px,
                     )
+
+                if 0 <= frame.index < len(pose_result.detections):
+                    _draw_pose_overlay(top, pose_result.detections[frame.index], ov_config.point_radius_px)
 
                 row = frame_idx_to_row.get(frame.index)
                 if row is not None:

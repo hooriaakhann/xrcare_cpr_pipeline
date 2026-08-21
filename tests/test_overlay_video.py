@@ -7,11 +7,14 @@ import pytest
 from hybrid.caching import CacheManager
 from hybrid.config import load_config
 from hybrid.dataset import discover_development_videos
+from hybrid.mediapipe_pose import PoseDetection
 from hybrid.mediapipe_roi import HandDetection
 from hybrid.mediapipe_roi import RoiBox as _RoiBox
 from hybrid.overlay_video import (
     _draw_cotracker_overlay,
     _draw_mediapipe_overlay,
+    _draw_pose_overlay,
+    _draw_skeleton,
     _polyline_segments,
     _render_motion_strip_base,
     save_overlay_video_for_video,
@@ -55,6 +58,67 @@ def test_draw_mediapipe_overlay_draws_landmarks():
     )
 
     _draw_mediapipe_overlay(image, detection, point_radius_px=4, box_thickness_px=2)
+
+    assert image.any()
+
+
+def test_draw_mediapipe_overlay_connects_full_hand_skeleton():
+    image = np.zeros((200, 200, 3), dtype=np.uint8)
+    # 21 distinct points spread across the frame -- enough for every
+    # HAND_CONNECTIONS edge to draw a real, non-degenerate line.
+    points = tuple((10.0 + 8.0 * i, 10.0 + 8.0 * i) for i in range(21))
+    detection = HandDetection(frame_index=0, timestamp_sec=0.0, detected=True, landmarks_xy=points)
+
+    _draw_mediapipe_overlay(image, detection, point_radius_px=4, box_thickness_px=2)
+
+    assert image.any()
+    # a connected skeleton should light up meaningfully more pixels than 21 isolated dots would
+    assert np.count_nonzero(image.any(axis=2)) > 21 * 9  # 21 dots of ~radius-2 (~9px each) as a floor
+
+
+# ---------------------------------------------------------------------------
+# _draw_skeleton / _draw_pose_overlay
+# ---------------------------------------------------------------------------
+
+
+def test_draw_skeleton_draws_joints_and_bones():
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    points = ((10.0, 10.0), (50.0, 50.0), (90.0, 90.0))
+    connections = ((0, 1), (1, 2))
+
+    _draw_skeleton(image, points, connections, joint_color=(0, 255, 0), bone_color=(0, 128, 0), point_radius_px=3)
+
+    assert image.any()
+    # a pixel roughly on the line between joint 0 and joint 1 should be colored
+    assert image[30, 30].any()
+
+
+def test_draw_skeleton_skips_out_of_range_connections():
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    points = ((10.0, 10.0),)  # only 1 point
+    connections = ((0, 1), (1, 2))  # both reference points that don't exist
+
+    _draw_skeleton(image, points, connections, joint_color=(0, 255, 0), bone_color=(0, 128, 0), point_radius_px=3)
+
+    # the single joint still gets drawn; must not raise on the out-of-range connections
+    assert image.any()
+
+
+def test_draw_pose_overlay_no_op_when_not_detected():
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    detection = PoseDetection(frame_index=0, timestamp_sec=0.0, detected=False)
+
+    _draw_pose_overlay(image, detection, point_radius_px=4)
+
+    assert not image.any()
+
+
+def test_draw_pose_overlay_draws_full_skeleton_when_detected():
+    image = np.zeros((300, 300, 3), dtype=np.uint8)
+    points = tuple((10.0 + 8.0 * i, 10.0 + 8.0 * i) for i in range(33))
+    detection = PoseDetection(frame_index=0, timestamp_sec=0.0, detected=True, landmarks_xy=points)
+
+    _draw_pose_overlay(image, detection, point_radius_px=4)
 
     assert image.any()
 

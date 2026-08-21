@@ -746,3 +746,69 @@ VFR source timing is necessarily approximated here since a standard MP4 containe
 same acknowledged tension as Phase 8's resampling). Spot-checked `video3` via `ffprobe`:
 1520x2166 (2166 = original frame height 2016 + 150px strip), 509 frames, matches Phase 4/6's
 already-documented frame count for that video exactly.
+
+---
+
+## Overlay Video Follow-Up: Connected Hand Skeleton + MediaPipe Pose (user-requested)
+
+Follow-up to the overlay-video feature above: the user asked for hand landmarks and "mediapipe
+pose points" to be shown. Clarified via two questions before building (matching this session's
+established practice of asking rather than guessing on real scope decisions) -- confirmed they
+wanted a genuinely separate MediaPipe Pose model added (33-point body skeleton: shoulders,
+elbows, hips, ...), not just better rendering of the hand landmarks already being drawn.
+
+**New model integration, `src/hybrid/mediapipe_pose.py`:** a second, independent MediaPipe
+Tasks branch (`PoseLandmarker`, VIDEO mode), structurally mirroring `mediapipe_roi.py`'s
+`MediaPipeHandLocalizer` almost exactly -- same lifecycle, same cached-wrapper pattern
+(`run_mediapipe_pose_on_video_cached`, its own cache-key scope over
+`mediapipe_pose` config + pinned model sha256). Deliberately does **not** raise if pose is
+never detected (unlike `HandNotDetectedError` for the hand branch) -- pose is purely decorative
+for the overlay video, not required by any estimator, so a video with zero pose detections just
+means an empty skeleton, not a broken pipeline. `pose_landmarker_lite` chosen over full/heavy
+-- this branch feeds nothing downstream and the project is CPU-only throughout.
+
+**New pinned model, `models.py`:** `POSE_LANDMARKER`, downloaded and its real sha256 computed
+directly (`59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`) rather than
+guessed -- an invented hash would just make `ensure_model()`'s checksum verification fail on
+first real use, so this had to be the actual file's digest, matched CLAUDE.md's provenance
+model exactly (same pattern as `HAND_LANDMARKER`/RepNet's pinned checkpoints).
+
+**Hand skeleton properly connected, not just dots:** `mediapipe_roi.py` gained
+`HAND_CONNECTIONS`, the standard 21-point MediaPipe Hands topology, spelled out as a code
+constant (this installed `mediapipe` build has no `mp.solutions` at all -- confirmed by
+`hasattr(mp, 'solutions') == False` -- so it can't be imported from the library, same reason
+Phase 2 already hand-rolled its own landmark handling). `mediapipe_pose.py` similarly defines
+`POSE_CONNECTIONS` (33-point BlazePose/MediaPipe Pose topology) for the same reason.
+`overlay_video.py`'s drawing logic was refactored into one shared `_draw_skeleton()` helper
+(bones drawn first, joints on top so they stay visible where multiple bones meet), used by both
+`_draw_mediapipe_overlay` (hand, magenta) and the new `_draw_pose_overlay` (body, orange) --
+kept visually distinct colors so the two skeletons don't get confused with each other or with
+CoTracker's tracked points (still green/red) or the ROI box (still green, different stroke
+style via rectangle vs. line).
+
+**New config section `mediapipe_pose`** (`min_pose_detection_confidence`,
+`min_pose_presence_confidence`, `min_tracking_confidence`) -- same shape and validators as the
+existing `mediapipe` section, per the no-hardcoded-parameters rule. `config/frozen.yaml` again
+deliberately untouched (same reasoning as the first overlay-video entry above): it still
+validates, defaults fill in the new section, and its `config_hash()` shifts again as an
+unavoidable consequence of the schema gaining fields -- `e1768d77f65e` remains the historically
+correct value for the `frozen-for-test-v1` tag/commit specifically, untouched by any of this.
+
+**Tests (`tests/test_mediapipe_pose.py`, 7 tests; `tests/test_overlay_video.py`, +5 tests):**
+`POSE_CONNECTIONS` indices all valid/non-self-referential, config-hash sensitivity, the same
+three cached-wrapper tests (hit/disabled/config-change) mirrored from `test_mediapipe_roi.py`,
+plus two `@pytest.mark.slow` real-model tests -- a synthetic blank video confirms zero pose
+detections doesn't raise (unlike the hand branch's blank-video test, which does), and a real
+dev-video spot-check (video1) confirms real pose detections with 33 landmarks. New
+`overlay_video.py` tests cover `_draw_skeleton` (joints+bones drawn; out-of-range connection
+indices skipped without raising) and `_draw_pose_overlay` (no-op when undetected; full 33-point
+skeleton drawn when detected). Full suite: **252 fast + 7 slow = 259 tests**, all passing, ruff
+clean.
+
+**Real-data results:** re-ran `save_overlay_videos_for_all_videos` over all 6 development
+videos with the new pose branch wired in (fresh Pose Landmarker inference for 5 of 6 videos --
+video3 was already cached from an earlier sanity check). All 6 `overlay.mp4` regenerated
+(65-92MB each, larger than the previous pass since there's more drawn content per frame).
+Re-spot-checked `video3` via `ffprobe`: still 1520x2166, 509 frames, valid `mpeg4` -- confirms
+the regeneration didn't change anything about the video's own structure, only what's drawn on
+it.

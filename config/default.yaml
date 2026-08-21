@@ -39,6 +39,11 @@ mediapipe:
   forearm_extension_ratio: 1.2
   max_detection_gap_sec: 1.0
 
+mediapipe_pose:
+  min_pose_detection_confidence: 0.5
+  min_pose_presence_confidence: 0.5
+  min_tracking_confidence: 0.5
+
 cotracker:
   num_points: 40
   visibility_threshold: 0.6
