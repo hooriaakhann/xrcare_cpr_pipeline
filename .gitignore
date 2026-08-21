@@ -51,7 +51,8 @@ Thumbs.db
 # CLAUDE.md rule 4) ---
 models/
 
-# --- Source clip for the README demo GIF: shows an identifiable person's
-# face, unblurred. Never commit this — docs/assets/demo.gif (the blurred,
-# public version) is the only one that belongs in git. ---
+# --- Source clips for README/social-preview assets: show an identifiable
+# person's face, unblurred. Never commit these — the blurred versions in
+# docs/assets/ are the only ones that belong in git. ---
 /gif.mp4
+/new gif.mp4
