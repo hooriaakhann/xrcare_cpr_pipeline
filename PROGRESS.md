@@ -601,3 +601,89 @@ affect pipeline correctness, accuracy, or the CLAUDE.md/spec completion bar for 
 
 **This is the last phase in `cpr_hybrid_pipeline_prompt_v2.md`'s numbered list (0-21).** Every
 phase from 0 through 21 now has a completed PROGRESS.md entry.
+
+---
+
+## Held-Out Test-Set Evaluation (post-Phase-21, one-shot, user-directed)
+
+Not one of the spec's numbered phases -- a separate, explicitly-gated exercise run after all 21
+were done, per CLAUDE.md rules 1-2 ("test videos stay completely held out until the pipeline is
+finalized and frozen") and the user's own explicit five-step protocol (freeze -> dedicated
+runner -> run once -> report honestly -> document and tag), with a stop-and-confirm gate before
+each step rather than run as part of any `/goal`-style continuous pass.
+
+**Freeze:** `config/default.yaml` confirmed to match Phase 15's final tuned config exactly
+(only `fusion.disagreement_scale_cpm` changed from its untuned default, 10.0 -> 5.0; every
+other value, including the ego-motion bounds Phase 15 explicitly declined to change, untouched
+since Phase 0.5). Copied byte-for-byte to `config/frozen.yaml` (verified via `load_config` ->
+identical `.model_dump()`), committed, tagged `frozen-for-test-v1`
+(`5f22756faf03d5924e022c3410b59be115393bf6`), tag confirmed present on the remote.
+
+**Pre-freeze investigation (user-requested, before approving the runner script):** re-verified
+via fresh runs, not memory, that the Phase 14 ego-motion-drift finding was real and the Phase 15
+sweep's decision not to adopt tighter bounds was correct: the isolated `C_cotracker_affine`
+ablation arm still shows video2 as a 45.5 CPM (65.7%) outlier under the frozen config, vs. clean
+(video1/3/4, <5%) or moderate (video9/10, 8-10%) results elsewhere in the dev set -- but the
+full fused hybrid stays accurate on all six (0.19-3.30 CPM), confirming Phase 7/12's
+confidence-weighted fusion is genuinely containing this, not just masking one known case.
+Also confirmed, by reading `optical_flow.py` rather than assuming: the flow branch avoids
+ego-motion's cumulative-drift risk not because it reuses Phase 4's transform per-frame instead
+of cumulatively, but because it doesn't use that transform at all -- it cancels camera motion
+via its own independent per-frame background/foreground flow subtraction on the same Farneback
+field. Both findings written into `docs/method_card.md` (commit `59ac345`).
+
+**Dedicated runner:** `src/hybrid/run_test.py` -- mirrors `run_development.py`'s Phase 18 guard
+(`guard_test_only`, refuses anything not matching `*_test.mp4`), always loads
+`config/frozen.yaml` by explicit path (never `default.yaml`), reports the same per-video fields
+as Phase 13 plus a percentile-bootstrap 95% MAE CI (added on request, same method as
+`evaluation.py`'s dev-set CI -- standard reporting, not a config/pipeline change), and logs
+every run to the ledger under `phase="test_evaluation"`, kept distinct from
+`development_evaluation`/`parameter_tuning`. Required a small supporting addition,
+`discover_test_videos()` in `dataset.py` (refactored out of `discover_development_videos` via a
+shared private helper rather than duplicated), using the `config.video.test_glob` field that
+was already in the schema but unused. 18 new tests, all against `tmp_path` fixtures/mocks --
+never a real test video. Verified before running anything real: full `make test` suite green
+(232/232) after the `dataset.py` refactor, `discover_development_videos()` re-run against the
+real dev set to confirm identical output post-refactor (not just the synthetic test fixtures),
+and `git diff frozen-for-test-v1..HEAD` over every pipeline-relevant module confirmed empty
+(only orchestration-code commits since the freeze). Also closed an ambiguity before trusting
+the dev-side number for comparison: the last-recorded dev MAE already reflected the tuned
+config but had been produced via `load_config()` (default.yaml), only hash-equivalent to
+`frozen.yaml`, not loaded from it by path -- re-ran `run_development_evaluation()` loading
+`config/frozen.yaml` explicitly; bit-identical result (MAE=1.7782, confirmed via matching
+`config_hash=e1768d77f65e` on both files), now the number of record.
+
+**Pre-run inspection gate:** `discover_test_videos()` run against the real `data/split/`
+directory (filesystem/metadata inspection only -- no video decoding, no pipeline execution)
+found exactly the 4 videos Phase 0 originally recorded (video5/6/7/8), each mapping to a unique,
+unambiguous GT row via the same suffix-stripping logic used throughout. No corruption check was
+run (out of scope for this gate; any corruption would surface as a graceful per-video error in
+the run itself, not a crash).
+
+**The one-shot run:** `python -m hybrid.run_test` against all 4 test videos, cold cache
+(~1h56m wall-clock, CPU-only). Full results in `docs/test_results.md`; summary:
+
+| | Dev (n=6) | Test (n=4) |
+|---|---:|---:|
+| MAE | 1.778 (95% CI [0.883, 2.680]) | **4.851** (95% CI [2.117, 7.632]) |
+| RMSE | 2.117 | **5.562** |
+| mean signed error | +0.317 | -0.047 |
+
+Test MAE is 2.7x dev MAE; test RMSE is 2.6x dev RMSE -- a real generalization gap, reported as
+found. `video6` (8.72 CPM error, the worst of any video in either set) is explained in
+`docs/test_results.md` as a likely shared-signal problem, not four independent estimator
+failures: all four classical estimators consume the exact same `filter_result.filtered_signal`
+array (confirmed at `estimators.py:204`), so their mutual agreement on a low reading is one
+signal read four ways, not independent confirmation -- pointing at the Phase 7/8 fused-waveform
+stage as the likely source. RepNet's separate, independent collapse on the same video (10.90 vs
+GT 85.71, at confidence 0.47) matches the already-documented domain-mismatch pattern. A new
+limitation was surfaced and documented: confidence does not reliably track accuracy (video5:
+highest test confidence, second-worst error; RepNet's video6 miss: moderate confidence, near-
+total failure). Mean signed error near zero despite individual errors up to 8.72 indicates
+increased variance on novel footage, not a directional bias.
+
+**No config, estimator, fusion, or confidence-weighting change was made in response to these
+results**, per the freeze rule. `docs/test_results.md` added, `README.md` given a short pointer
+section. Ledger entry logged automatically by `run_test.py` (`phase="test_evaluation"`,
+`config_hash=e1768d77f65e`, matching `frozen.yaml`). Tagged `v1.0-final-test-results` on the
+commit that adds `docs/test_results.md`.

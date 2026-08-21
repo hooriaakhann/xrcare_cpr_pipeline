@@ -166,6 +166,17 @@ ablation study's structural conclusions (hybrid beats any single branch, RepNet'
 mismatch, video2's CoTracker+affine drift) aren't sensitive to that one scalar, but the exact
 MAE figures in those entries are from the pre-tuning config.
 
+## Held-out test-set results
+
+The pipeline has been run once, under a frozen config (git tag `frozen-for-test-v1`), against
+the 4 held-out test videos. **Test MAE (4.851) is 2.7x dev MAE (1.778); test RMSE (5.562) is
+2.6x dev RMSE (2.117)** — a real generalization gap, reported as found, not adjusted for. See
+`docs/test_results.md` for the full per-video table, the dev-vs-test comparison, and three
+findings from this run: a shared-signal explanation for video6's error (the four classical
+estimators aren't independent evidence — they read one common fused waveform), a new
+confidence-doesn't-track-accuracy limitation, and a check that the errors aren't systematically
+directional. Nothing in the pipeline changed in response to these numbers.
+
 ## Design notes (Phase 0/1 preprocessing)
 
 - **No spatial cropping / ROI at the preprocessing stage.** Full frame is preserved so later
