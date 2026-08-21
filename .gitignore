@@ -50,3 +50,8 @@ Thumbs.db
 # pinned by URL + sha256 in src/hybrid/models.py — never fine-tuned, see
 # CLAUDE.md rule 4) ---
 models/
+
+# --- Source clip for the README demo GIF: shows an identifiable person's
+# face, unblurred. Never commit this — docs/assets/demo.gif (the blurred,
+# public version) is the only one that belongs in git. ---
+/gif.mp4

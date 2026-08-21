@@ -7,6 +7,8 @@ rate estimators) with an independent learned repetition counter (RepNet), fused 
 confidence-weighted, disagreement-aware voting. See `docs/method_card.md` for intended use,
 limitations, and observed failure modes.
 
+![Demo](docs/assets/demo.gif)
+
 ```text
 Development smart-glasses video
               ↓
