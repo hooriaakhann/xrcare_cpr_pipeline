@@ -425,6 +425,29 @@ class FusionConfig(StrictModel):
         return v
 
 
+class OverlayVideoConfig(StrictModel):
+    """Per-video diagnostic overlay MP4 (not part of inference/estimation --
+    a presentation-only artifact combining MediaPipe's ROI, CoTracker's raw
+    tracked points, and the ego-motion-corrected motion signal on one video
+    for visual sanity-checking). Colors are small fixed constants in
+    `overlay_video.py`, not config fields -- they don't affect any
+    measurement, only how a debug video looks, so making every BGR tuple a
+    tunable parameter would be config bloat with no real benefit.
+    """
+
+    point_radius_px: int = 4
+    roi_box_thickness_px: int = 2
+    motion_strip_height_px: int = 150
+    fourcc: str = "mp4v"
+
+    @field_validator("point_radius_px", "roi_box_thickness_px", "motion_strip_height_px")
+    @classmethod
+    def _positive_int(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"must be > 0, got {v}")
+        return v
+
+
 class HybridConfig(StrictModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -439,6 +462,7 @@ class HybridConfig(StrictModel):
     estimators: EstimatorsConfig = Field(default_factory=EstimatorsConfig)
     repnet: RepNetConfig = Field(default_factory=RepNetConfig)
     fusion: FusionConfig = Field(default_factory=FusionConfig)
+    overlay_video: OverlayVideoConfig = Field(default_factory=OverlayVideoConfig)
 
     def config_hash(self) -> str:
         """Short hash of the fully-resolved config, for cache keys and the experiment ledger."""

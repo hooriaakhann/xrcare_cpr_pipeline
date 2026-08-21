@@ -687,3 +687,62 @@ results**, per the freeze rule. `docs/test_results.md` added, `README.md` given 
 section. Ledger entry logged automatically by `run_test.py` (`phase="test_evaluation"`,
 `config_hash=e1768d77f65e`, matching `frozen.yaml`). Tagged `v1.0-final-test-results` on the
 commit that adds `docs/test_results.md`.
+
+---
+
+## Diagnostic Overlay Video (post-test-eval, user-requested feature)
+
+Not one of the spec's phases or part of the held-out-test protocol -- a presentation-only
+feature added on request: one combined MP4 per development video, so pipeline results can be
+sanity-checked/demoed visually instead of only read as CSV/JSON. Explicitly scoped to
+development videos only (no interaction with the frozen test-set process).
+
+**`src/hybrid/overlay_video.py`:** `save_overlay_video_for_video()` decodes each dev video's
+real frames (`VideoReader`, Phase 1) and, per frame, draws MediaPipe's dynamic ROI box +
+landmarks (Phase 2) and CoTracker's raw tracked points (Phase 3, green=visible/red=occluded) on
+top. Beneath the frame, a fixed-height strip shows the raw vs. ego-motion-corrected tracker
+motion signal (Phase 5) as two static curves over the video's full duration, with a moving
+playhead line -- pre-rendered once per video, not redrawn every frame, since only the playhead
+changes. Output goes to `runs/development/<video_id>/overlay.mp4`, alongside Phase 16's
+CSV/JSON diagnostics. `save_overlay_videos_for_all_videos()` runs it over the whole dev set.
+Reuses cached MediaPipe/CoTracker/ego-motion branch results exactly as `diagnostics.py` does --
+no new model inference, just decode + draw + re-encode.
+
+**Design decisions:**
+- **Corrected trajectory shown as a signal strip, not warped onto the frame.** The
+  ego-motion-corrected coordinates live in a stabilized reference frame (roughly frame 0's),
+  not the current (moving) frame's own pixel space -- drawing them directly on an unwarped
+  frame would put them in the visually wrong place. Warping every frame by the inverse
+  cumulative transform to show them "in place" was considered and rejected as materially bigger
+  scope (full-frame image warping per frame) for a presentation-only feature; the motion-strip
+  approach shows exactly what the correction produces (the signal CPM estimation actually uses)
+  without a misleading overlay.
+- **New `overlay_video` config section** (`point_radius_px`, `roi_box_thickness_px`,
+  `motion_strip_height_px`, `fourcc`) added to `HybridConfig`/`config/default.yaml`, per
+  CLAUDE.md's "no hardcoded parameters" rule. Colors (BGR tuples) were deliberately left as
+  fixed constants in the module, not config fields -- they don't affect any measurement, only
+  how a debug video looks; making every color a tunable parameter would be config bloat with no
+  benefit. **`config/frozen.yaml` was deliberately left untouched** -- it still validates (the
+  new section just defaults), but its `config_hash()` naturally changed from `e1768d77f65e` to
+  `88f0d2d8bd5f` as a result of the schema gaining a field. This does not retroactively change
+  what was frozen or run: `e1768d77f65e` remains correct and historically valid, tied
+  specifically to the `frozen-for-test-v1` tag/commit (`5f22756`), which this change does not
+  touch. This feature has no interaction with the pipeline's inference/estimation path at all.
+- **New `VideoWriteError`** (`exceptions.py`) for a `cv2.VideoWriter` that fails to open, kept
+  distinct from `VideoReadError` (decoding failure) rather than overloaded onto it.
+
+**Tests (`tests/test_overlay_video.py`, 11 tests):** fast, mock-free unit tests for the drawing
+helpers (`_draw_mediapipe_overlay`, `_draw_cotracker_overlay`, `_polyline_segments`,
+`_render_motion_strip_base`) -- ROI/landmark/point drawing actually changes pixels, a
+non-detected frame is a no-op, NaN gaps split the polyline into separate segments rather than
+connecting across them, an all-NaN signal returns a blank strip without raising -- plus one
+`@pytest.mark.slow` real-video integration test (Phase 19's pattern: real cached branch data on
+`video3_development.mp4`, skips gracefully when `data/split/` isn't present), verifying the
+actual written MP4 opens, and has the expected width and `frame_height + strip_height`.
+
+**Real-data results:** ran `save_overlay_videos_for_all_videos` over all 6 development videos.
+All 6 `overlay.mp4` files created (47-80MB each, `mpeg4`/`mp4v` codec, 30fps constant --
+VFR source timing is necessarily approximated here since a standard MP4 container assumes CFR,
+same acknowledged tension as Phase 8's resampling). Spot-checked `video3` via `ffprobe`:
+1520x2166 (2166 = original frame height 2016 + 150px strip), 509 frames, matches Phase 4/6's
+already-documented frame count for that video exactly.

@@ -70,3 +70,8 @@ class HeldOutVideoError(HybridError):
     """Attempted to process a *_test.mp4 file outside the (not yet written)
     frozen-pipeline test-run script. Development/tuning code must only ever
     touch *_development.mp4 files (CLAUDE.md rules 1-2, Phase 18)."""
+
+
+class VideoWriteError(HybridError):
+    """An output video (e.g. a diagnostic overlay MP4) could not be opened
+    for writing or failed mid-write (bad codec/fourcc, unwritable path, ...)."""

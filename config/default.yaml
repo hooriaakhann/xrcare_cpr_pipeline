@@ -97,3 +97,9 @@ repnet:
 
 fusion:
   disagreement_scale_cpm: 5.0
+
+overlay_video:
+  point_radius_px: 4
+  roi_box_thickness_px: 2
+  motion_strip_height_px: 150
+  fourcc: mp4v

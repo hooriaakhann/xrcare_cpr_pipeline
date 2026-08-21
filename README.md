@@ -84,7 +84,7 @@ docs/
 
 models/                      # pretrained checkpoints, downloaded on demand (gitignored)
 runs/
-├── development/<video_id>/   # per-video diagnostics (Phase 16) -- gitignored, regenerable
+├── development/<video_id>/   # per-video diagnostics (Phase 16) + overlay.mp4 (hybrid.overlay_video) -- gitignored, regenerable
 └── experiment_ledger.jsonl   # append-only log of every dev run / tuning iteration
 
 src/
